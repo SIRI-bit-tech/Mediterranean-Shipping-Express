@@ -15,7 +15,7 @@ export function CTASection() {
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button size="lg" className="bg-black text-white hover:bg-gray-900 px-8" asChild>
-            <Link href="/signup">Create Free Account</Link>
+            <Link href="/auth/register">Create Free Account</Link>
           </Button>
           <Button
             size="lg"

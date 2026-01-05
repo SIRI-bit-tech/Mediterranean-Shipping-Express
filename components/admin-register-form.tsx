@@ -84,8 +84,8 @@ export function AdminRegisterForm() {
       }
 
       setSuccess(true)
-      localStorage.setItem("adminToken", data.token)
-      localStorage.setItem("admin", JSON.stringify(data.admin))
+      localStorage.setItem("token", data.token)
+      localStorage.setItem("user", JSON.stringify(data.admin))
       setTimeout(() => {
         window.location.href = "/admin"
       }, 1500)

@@ -1,43 +1,29 @@
 import { type NextRequest, NextResponse } from "next/server"
-
-const timelineDatabase: Record<string, any[]> = {
-  "1Z999AA10123456784": [
-    {
-      event: "Arrived at Sort Facility",
-      location: "New York, NY",
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      status: "completed",
-      details: "Package sorted and ready for delivery",
-    },
-    {
-      event: "Departed Logistics Hub",
-      location: "Milan, IT",
-      timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-      status: "completed",
-      details: "Package left Milan facility for international transit",
-    },
-    {
-      event: "Processed at Origin",
-      location: "Milan, IT",
-      timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000 - 6 * 60 * 60 * 1000).toISOString(),
-      status: "completed",
-      details: "Package received and processed",
-    },
-    {
-      event: "Shipment Initiated",
-      location: "Milan, IT",
-      timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000 - 8 * 60 * 60 * 1000).toISOString(),
-      status: "completed",
-      details: "Shipment created and label generated",
-    },
-  ],
-}
+import { query } from "@/lib/db"
 
 export async function GET(request: NextRequest, { params }: { params: { trackingNumber: string } }) {
   try {
     const { trackingNumber } = params
 
-    const timeline = timelineDatabase[trackingNumber] || []
+    // Get tracking checkpoints from database
+    const result = await query(
+      `SELECT tc.status, tc.location, tc.city, tc.country, tc.timestamp, tc.notes
+       FROM tracking_checkpoints tc
+       JOIN shipments s ON tc.shipment_id = s.id
+       WHERE s.tracking_number = $1 AND s.deleted_at IS NULL
+       ORDER BY tc.timestamp DESC`,
+      [trackingNumber]
+    )
+
+    const timeline = result.rows.map(checkpoint => ({
+      event: formatStatusEvent(checkpoint.status),
+      location: checkpoint.city && checkpoint.country ? 
+        `${checkpoint.city}, ${checkpoint.country}` : 
+        checkpoint.location,
+      timestamp: checkpoint.timestamp,
+      status: "completed",
+      details: checkpoint.notes || getStatusDescription(checkpoint.status),
+    }))
 
     return NextResponse.json({
       success: true,
@@ -45,7 +31,7 @@ export async function GET(request: NextRequest, { params }: { params: { tracking
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error("[v0] Timeline error:", error)
+    console.error("[MSE] Timeline error:", error)
     return NextResponse.json(
       {
         success: false,
@@ -54,4 +40,30 @@ export async function GET(request: NextRequest, { params }: { params: { tracking
       { status: 500 },
     )
   }
+}
+
+function formatStatusEvent(status: string): string {
+  const statusMap: Record<string, string> = {
+    'PROCESSING': 'Shipment Initiated',
+    'IN_TRANSIT': 'In Transit',
+    'IN_CUSTOMS': 'Customs Processing',
+    'OUT_FOR_DELIVERY': 'Out for Delivery',
+    'DELIVERED': 'Package Delivered',
+    'ON_HOLD': 'Shipment On Hold',
+    'EXCEPTION': 'Delivery Exception',
+  }
+  return statusMap[status] || status
+}
+
+function getStatusDescription(status: string): string {
+  const descriptionMap: Record<string, string> = {
+    'PROCESSING': 'Package received and processed',
+    'IN_TRANSIT': 'Package is in transit to destination',
+    'IN_CUSTOMS': 'Package is being processed by customs',
+    'OUT_FOR_DELIVERY': 'Package is out for delivery',
+    'DELIVERED': 'Package has been delivered',
+    'ON_HOLD': 'Package is temporarily on hold',
+    'EXCEPTION': 'Delivery exception occurred',
+  }
+  return descriptionMap[status] || 'Status updated'
 }

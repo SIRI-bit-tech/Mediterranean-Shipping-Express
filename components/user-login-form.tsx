@@ -123,15 +123,6 @@ export function UserLoginForm() {
           </Link>
         </p>
       </div>
-
-      <div className="mt-4 pt-4 border-t border-gray-200 text-center text-xs text-gray-500">
-        <p>
-          Admin?{" "}
-          <Link href="/admin/auth/login" className="text-gray-700 hover:text-black font-medium">
-            Admin Login
-          </Link>
-        </p>
-      </div>
     </Card>
   )
 }

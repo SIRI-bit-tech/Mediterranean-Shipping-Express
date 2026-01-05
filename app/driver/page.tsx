@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { MSEHeader } from "@/components/mse-header"
 import { MSEFooter } from "@/components/mse-footer"
 import { Card } from "@/components/ui/card"
@@ -8,55 +8,280 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DriverStats } from "@/components/driver-stats"
 import { DeliveryListItem } from "@/components/delivery-list-item"
-import { MapPin, AlertCircle, Navigation, LogOut, CheckCircle2 } from "lucide-react"
-import type { Shipment } from "@/lib/types/global"
+import { MapPin, AlertCircle, Navigation, LogOut, CheckCircle2, Loader2 } from "lucide-react"
 
 export default function DriverDashboard() {
-  const [deliveries, setDeliveries] = useState<Shipment[]>([
-    {
-      id: "1",
-      trackingNumber: "1Z999AA10123",
-      userId: "cust_1",
-      originAddressId: "addr_1",
-      destinationAddressId: "addr_2",
-      driverId: "driver_123",
-      status: "OUT_FOR_DELIVERY",
-      transportMode: "LAND",
-      currentCity: "Amsterdam",
-      currentCountry: "Netherlands",
-      currentLatitude: 52.37,
-      currentLongitude: 4.89,
-      estimatedDeliveryDate: new Date(Date.now() + 2 * 60 * 60 * 1000),
-      weight: 5.5,
-      description: "Office Supplies",
-      isInternational: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: "2",
-      trackingNumber: "1Z888BB10456",
-      userId: "cust_2",
-      originAddressId: "addr_1",
-      destinationAddressId: "addr_3",
-      driverId: "driver_123",
-      status: "OUT_FOR_DELIVERY",
-      transportMode: "LAND",
-      currentCity: "Amsterdam",
-      currentCountry: "Netherlands",
-      currentLatitude: 52.37,
-      currentLongitude: 4.89,
-      estimatedDeliveryDate: new Date(Date.now() + 3 * 60 * 60 * 1000),
-      weight: 2.3,
-      description: "Electronics",
-      isInternational: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-  ])
-
+  const [deliveries, setDeliveries] = useState<Shipment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
   const [gpsEnabled, setGpsEnabled] = useState(false)
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null)
+
+  useEffect(() => {
+    checkDriverAccess()
+  }, [])
+
+  const checkDriverAccess = async () => {
+    try {
+      const token = localStorage.getItem("token")
+      const userData = localStorage.getItem("user")
+      
+      if (!token || !userData) {
+        window.location.href = "/auth/login"
+        return
+      }
+
+      const user = JSON.parse(userData)
+      if (user.role !== "DRIVER") {
+        window.location.href = "/dashboard"
+        return
+      }
+
+      await fetchDeliveries()
+    } catch (err) {
+      setError("Failed to load driver data")
+      console.error("Driver access error:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchDeliveries = async () => {
+    try {
+      const token = localStorage.getItem("token")
+      const response = await fetch("/api/driver/deliveries", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      })
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem("token")
+          localStorage.removeItem("user")
+          window.location.href = "/auth/login"
+          return
+        }
+        throw new Error("Failed to fetch deliveries")
+      }
+
+      const data = await response.json()
+      setDeliveries(data.deliveries || [])
+    } catch (err) {
+      setError("Failed to load deliveries")
+      console.error("Error fetching deliveries:", err)
+    }
+  }
+
+  // Enable GPS tracking
+  const toggleGPS = () => {
+    if (!gpsEnabled) {
+      if (navigator.geolocation) {
+        navigator.geolocation.watchPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords
+            setLocation({ lat: latitude, lng: longitude })
+
+            // Send location update to backend
+            fetch("/api/driver/location", {
+              method: "PUT",
+              headers: { 
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${localStorage.getItem("token")}`
+              },
+              body: JSON.stringify({ latitude, longitude, accuracy: position.coords.accuracy }),
+            }).catch(console.error)
+          },
+          (error) => console.error("GPS error:", error),
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+        )
+      }
+    }
+    setGpsEnabled(!gpsEnabled)
+  }
+
+  const handleCompleteDelivery = async (shipmentId: string) => {
+    try {
+      const token = localStorage.getItem("token")
+      await fetch(`/api/shipments/${shipmentId}/status`, {
+        method: "PATCH",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          status: "DELIVERED",
+          location: location ? `${location.lat},${location.lng}` : "Delivered",
+        }),
+      })
+      
+      // Remove from deliveries list
+      setDeliveries(deliveries.filter((d) => d.id !== shipmentId))
+    } catch (error) {
+      console.error("Failed to complete delivery:", error)
+    }
+  }
+
+  // Calculate stats from real data
+  const stats = {
+    assignedDeliveries: deliveries.filter(d => ["OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(d.status)).length,
+    completedToday: deliveries.filter(d => d.status === "DELIVERED" && 
+      new Date(d.actualDeliveryDate || '').toDateString() === new Date().toDateString()).length,
+    totalDistance: 24.5, // This would come from GPS tracking data
+    averageRating: 4.8, // This would come from customer feedback
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen flex flex-col bg-gray-50">
+        <MSEHeader />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-gray-600" />
+            <p className="text-gray-600">Loading driver dashboard...</p>
+          </div>
+        </div>
+        <MSEFooter />
+      </main>
+    )
+  }
+
+  if (error) {
+    return (
+      <main className="min-h-screen flex flex-col bg-gray-50">
+        <MSEHeader />
+        <div className="flex-1 flex items-center justify-center">
+          <Card className="p-8 max-w-md text-center">
+            <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-black mb-2">Error Loading Dashboard</h2>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={fetchDeliveries} className="bg-black text-white hover:bg-gray-900">
+              Try Again
+            </Button>
+          </Card>
+        </div>
+        <MSEFooter />
+      </main>
+    )
+  }
+
+  return (
+    <main className="min-h-screen flex flex-col bg-gray-50">
+      <MSEHeader />
+
+      <div className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-12">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-black">Driver Dashboard</h1>
+            <p className="text-gray-600 mt-2">Manage your deliveries for today</p>
+          </div>
+          <div className="mt-4 md:mt-0 flex items-center gap-3">
+            <Button
+              onClick={toggleGPS}
+              variant={gpsEnabled ? "default" : "outline"}
+              className={gpsEnabled ? "bg-green-600 text-white hover:bg-green-700" : ""}
+            >
+              <Navigation className="h-4 w-4 mr-2" />
+              {gpsEnabled ? "GPS Active" : "Enable GPS"}
+            </Button>
+            <Button variant="outline" className="border-gray-300 bg-transparent">
+              <LogOut className="h-4 w-4 mr-2" />
+              Logout
+            </Button>
+          </div>
+        </div>
+
+        {/* GPS Status Alert */}
+        {gpsEnabled && location && (
+          <Card className="mb-8 p-4 bg-green-50 border border-green-200">
+            <div className="flex items-center gap-3">
+              <MapPin className="h-5 w-5 text-green-600" />
+              <div>
+                <p className="font-semibold text-green-900">GPS Tracking Active</p>
+                <p className="text-sm text-green-700">
+                  Your location is being shared: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Stats */}
+        <div className="mb-8">
+          <DriverStats
+            assignedDeliveries={stats.assignedDeliveries}
+            completedToday={stats.completedToday}
+            totalDistance={stats.totalDistance}
+            averageRating={stats.averageRating}
+          />
+        </div>
+
+        {/* Deliveries */}
+        <Card className="p-6">
+          <Tabs defaultValue="assigned" className="w-full">
+            <TabsList className="mb-6">
+              <TabsTrigger value="assigned">
+                Assigned ({deliveries.filter((d) => ["OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(d.status)).length})
+              </TabsTrigger>
+              <TabsTrigger value="completed">
+                Completed ({stats.completedToday})
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="assigned" className="space-y-4">
+              {deliveries.filter((d) => ["OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(d.status)).length === 0 ? (
+                <div className="text-center py-12">
+                  <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No active deliveries assigned</p>
+                </div>
+              ) : (
+                deliveries
+                  .filter((d) => ["OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(d.status))
+                  .map((delivery) => (
+                    <DeliveryListItem
+                      key={delivery.id}
+                      shipment={delivery}
+                      onNavigate={(s) =>
+                        window.open(`https://maps.google.com/?q=${s.currentLatitude},${s.currentLongitude}`)
+                      }
+                      onComplete={handleCompleteDelivery}
+                    />
+                  ))
+              )}
+            </TabsContent>
+
+            <TabsContent value="completed" className="space-y-4">
+              {stats.completedToday === 0 ? (
+                <div className="text-center py-12 text-gray-600">
+                  <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-4" />
+                  <p>No deliveries completed today yet.</p>
+                </div>
+              ) : (
+                deliveries
+                  .filter(d => d.status === "DELIVERED" && 
+                    new Date(d.actualDeliveryDate || '').toDateString() === new Date().toDateString())
+                  .map((delivery) => (
+                    <DeliveryListItem
+                      key={delivery.id}
+                      shipment={delivery}
+                      onNavigate={(s) =>
+                        window.open(`https://maps.google.com/?q=${s.currentLatitude},${s.currentLongitude}`)
+                      }
+                      onComplete={handleCompleteDelivery}
+                    />
+                  ))
+              )}
+            </TabsContent>
+          </Tabs>
+        </Card>
+      </div>
+
+      <MSEFooter />
+    </main>
+  )
+}
 
   // Enable GPS tracking
   const toggleGPS = () => {
