@@ -5,13 +5,6 @@ import { Shield, User, LogOut, Settings, BarChart3, Users, Package } from "lucid
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 
-interface User {
-  id: string
-  name: string
-  email: string
-  role: 'CUSTOMER' | 'DRIVER' | 'ADMIN'
-}
-
 export function AdminHeader() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
