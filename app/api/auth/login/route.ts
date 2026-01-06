@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { handleAPIError, ValidationError } from "@/lib/api-errors"
+import { handleAPIError, ValidationError, UnauthorizedError } from "@/lib/api-errors"
+import { query } from "@/lib/db"
+import bcrypt from "bcryptjs"
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,20 +15,36 @@ export async function POST(request: NextRequest) {
       throw new ValidationError("Please enter a valid email address")
     }
 
-    // Mock database query - replace with actual database
-    // In production: SELECT id, name, email, role, is_verified FROM users WHERE email = $1 AND is_active = true AND deleted_at IS NULL
-    // This uses idx_users_email_active for optimal performance
-    const user = {
-      id: "user_123",
-      name: "John Doe",
-      email: email,
-      role: "CUSTOMER",
-      isVerified: true,
-      createdAt: new Date(),
+    // Find user in database
+    const result = await query(
+      'SELECT id, name, email, password_hash, role, is_verified, is_active FROM users WHERE email = $1 AND is_active = true',
+      [email.toLowerCase()]
+    )
+
+    if (result.rows.length === 0) {
+      throw new UnauthorizedError()
     }
 
-    // Mock JWT token - replace with actual JWT generation
-    const token = Buffer.from(JSON.stringify({ id: user.id, role: "CUSTOMER" })).toString("base64")
+    const user = result.rows[0]
+
+    // Verify password
+    const passwordValid = await bcrypt.compare(password, user.password_hash)
+    if (!passwordValid) {
+      throw new UnauthorizedError()
+    }
+
+    // Generate token
+    const token = Buffer.from(JSON.stringify({ 
+      id: user.id, 
+      role: user.role,
+      exp: Date.now() + (rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000) // 30 days if remember me, else 24 hours
+    })).toString("base64")
+
+    // Update last login
+    await query(
+      'UPDATE users SET last_login = NOW() WHERE id = $1',
+      [user.id]
+    )
 
     return NextResponse.json(
       {
@@ -37,12 +55,14 @@ export async function POST(request: NextRequest) {
           name: user.name,
           email: user.email,
           role: user.role,
+          isVerified: user.is_verified,
         },
         rememberMe,
       },
       { status: 200 },
     )
   } catch (error) {
+    console.error('Login error:', error)
     const { statusCode, response } = handleAPIError(error)
     return NextResponse.json(response, { status: statusCode })
   }

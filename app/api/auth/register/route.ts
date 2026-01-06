@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { handleAPIError, ValidationError, ConflictError } from "@/lib/api-errors"
+import { query } from "@/lib/db"
+import bcrypt from "bcryptjs"
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,24 +23,35 @@ export async function POST(request: NextRequest) {
       throw new ValidationError("Password must be at least 8 characters")
     }
 
-    // Mock check for existing user - replace with: SELECT id FROM users WHERE email = $1
-    // This uses idx_users_email for optimal performance
-    const userExists = false // In production, query database
+    // Check if user already exists
+    const existingUser = await query(
+      'SELECT id FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    )
 
-    if (userExists) {
+    if (existingUser.rows.length > 0) {
       throw new ConflictError("An account with this email already exists")
     }
 
-    // Mock user creation - in production with database
-    const user = {
-      id: `user_${Date.now()}`,
-      name,
-      email,
-      role: "CUSTOMER",
-      createdAt: new Date(),
-    }
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 12)
 
-    const token = Buffer.from(JSON.stringify({ id: user.id, role: "CUSTOMER" })).toString("base64")
+    // Create user in database
+    const result = await query(
+      `INSERT INTO users (name, email, password_hash, role, is_verified, is_active, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+       RETURNING id, name, email, role, is_verified, is_active, created_at`,
+      [name.trim(), email.toLowerCase(), passwordHash, 'CUSTOMER', false, true]
+    )
+
+    const user = result.rows[0]
+
+    // Generate simple token (in production, use proper JWT)
+    const token = Buffer.from(JSON.stringify({ 
+      id: user.id, 
+      role: user.role,
+      exp: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+    })).toString('base64')
 
     return NextResponse.json(
       {
@@ -49,11 +62,14 @@ export async function POST(request: NextRequest) {
           name: user.name,
           email: user.email,
           role: user.role,
+          isVerified: user.is_verified,
+          isActive: user.is_active,
         },
       },
       { status: 201 },
     )
   } catch (error) {
+    console.error('Registration error:', error)
     const { statusCode, response } = handleAPIError(error)
     return NextResponse.json(response, { status: statusCode })
   }

@@ -4,13 +4,13 @@ import { requireAuth } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify user authentication
+    // Verify driver authentication
     const user = await requireAuth(request)
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!user || user.role !== 'DRIVER') {
+      return NextResponse.json({ error: "Unauthorized - Driver access required" }, { status: 401 })
     }
 
-    // Fetch user's shipments from database
+    // Fetch driver's assigned deliveries
     const result = await query(
       `SELECT id, tracking_number, user_id, origin_address_id, destination_address_id, 
               driver_id, status, transport_mode, current_location, current_city, 
@@ -19,12 +19,12 @@ export async function GET(request: NextRequest) {
               description, package_value, special_handling, on_hold_reason, 
               is_international, customs_status, created_at, updated_at
        FROM shipments 
-       WHERE user_id = $1 AND deleted_at IS NULL 
-       ORDER BY created_at DESC`,
+       WHERE driver_id = $1 AND deleted_at IS NULL 
+       ORDER BY estimated_delivery_date ASC`,
       [user.id]
     )
 
-    const shipments = result.rows.map(shipment => ({
+    const deliveries = result.rows.map(shipment => ({
       id: shipment.id,
       trackingNumber: shipment.tracking_number,
       userId: shipment.user_id,
@@ -54,10 +54,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      shipments,
+      deliveries,
     })
   } catch (error) {
-    console.error('Error fetching user shipments:', error)
+    console.error('Error fetching driver deliveries:', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

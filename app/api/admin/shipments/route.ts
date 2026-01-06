@@ -1,16 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
-import { requireAuth } from "@/lib/auth"
+import { requireAdminAuth } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify user authentication
-    const user = await requireAuth(request)
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Verify admin authentication
+    const admin = await requireAdminAuth(request)
+    if (!admin) {
+      return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 })
     }
 
-    // Fetch user's shipments from database
+    // Fetch all shipments from database
     const result = await query(
       `SELECT id, tracking_number, user_id, origin_address_id, destination_address_id, 
               driver_id, status, transport_mode, current_location, current_city, 
@@ -19,9 +19,8 @@ export async function GET(request: NextRequest) {
               description, package_value, special_handling, on_hold_reason, 
               is_international, customs_status, created_at, updated_at
        FROM shipments 
-       WHERE user_id = $1 AND deleted_at IS NULL 
-       ORDER BY created_at DESC`,
-      [user.id]
+       WHERE deleted_at IS NULL 
+       ORDER BY created_at DESC`
     )
 
     const shipments = result.rows.map(shipment => ({
@@ -57,7 +56,7 @@ export async function GET(request: NextRequest) {
       shipments,
     })
   } catch (error) {
-    console.error('Error fetching user shipments:', error)
+    console.error('Error fetching shipments:', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

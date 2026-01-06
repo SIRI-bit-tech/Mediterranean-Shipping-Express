@@ -1,42 +1,54 @@
-// Authentication utilities
+import { NextRequest } from "next/server"
+import { query } from "@/lib/db"
 
-import { cookies } from "next/headers"
-
-const SESSION_COOKIE_NAME = "mse_session"
-const SESSION_COOKIE_MAX_AGE = 86400 * 7 // 7 days
-
-export async function setSessionCookie(token: string) {
-  const cookieStore = await cookies()
-  cookieStore.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: SESSION_COOKIE_MAX_AGE,
-  })
+export interface AuthUser {
+  id: string
+  name: string
+  email: string
+  role: 'CUSTOMER' | 'DRIVER' | 'ADMIN'
 }
 
-export async function getSessionToken(): Promise<string | null> {
-  const cookieStore = await cookies()
-  return cookieStore.get(SESSION_COOKIE_NAME)?.value || null
-}
-
-export async function clearSessionCookie() {
-  const cookieStore = await cookies()
-  cookieStore.delete(SESSION_COOKIE_NAME)
-}
-
-export async function getCurrentUser() {
-  const token = await getSessionToken()
-  if (!token) return null
-
+export async function verifyToken(token: string): Promise<AuthUser | null> {
   try {
-    // In production, verify JWT properly
-    // This is a mock - implement with real JWT verification
-    const parts = token.split(".")
-    if (parts.length !== 3) return null
-    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString())
-    return payload
-  } catch {
+    // Decode the base64 token
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'))
+    
+    // Check if token is expired
+    if (decoded.exp && decoded.exp < Date.now()) {
+      return null
+    }
+
+    // Verify user exists in database
+    const result = await query(
+      'SELECT id, name, email, role FROM users WHERE id = $1 AND is_active = true',
+      [decoded.id]
+    )
+
+    if (result.rows.length === 0) {
+      return null
+    }
+
+    return result.rows[0] as AuthUser
+  } catch (error) {
+    console.error('Token verification error:', error)
     return null
   }
+}
+
+export async function requireAuth(request: NextRequest): Promise<AuthUser | null> {
+  const authHeader = request.headers.get("authorization")
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return null
+  }
+
+  const token = authHeader.replace("Bearer ", "")
+  return await verifyToken(token)
+}
+
+export async function requireAdminAuth(request: NextRequest): Promise<AuthUser | null> {
+  const user = await requireAuth(request)
+  if (!user || user.role !== 'ADMIN') {
+    return null
+  }
+  return user
 }

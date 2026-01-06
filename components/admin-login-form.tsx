@@ -35,8 +35,8 @@ export function AdminLoginForm() {
         return
       }
 
-      localStorage.setItem("adminToken", data.token)
-      localStorage.setItem("admin", JSON.stringify(data.admin))
+      localStorage.setItem("token", data.token)
+      localStorage.setItem("user", JSON.stringify(data.admin))
       window.location.href = "/admin"
     } catch (err) {
       setError("An error occurred. Please try again.")
@@ -123,6 +123,12 @@ export function AdminLoginForm() {
 
         <div className="mt-6 pt-6 border-t border-gray-800 text-center text-sm">
           <p className="text-gray-400">
+            Need to register as admin?{" "}
+            <Link href="/admin/auth/register" className="text-yellow-500 hover:text-yellow-400">
+              Admin Registration
+            </Link>
+          </p>
+          <p className="text-gray-400 mt-2">
             Need help?{" "}
             <Link href="/support" className="text-yellow-500 hover:text-yellow-400">
               Contact Support
