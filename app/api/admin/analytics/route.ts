@@ -118,6 +118,22 @@ export async function GET(request: NextRequest) {
     const driverStats = activeDriversResult.rows[0] || { total_drivers: 0, active_drivers: 0 }
     const avgDeliveryTime = parseFloat(avgDeliveryTimeResult.rows[0]?.avg_days || '0')
     
+    // Process historical data for growth calculations
+    const totalShipmentsPrevious = parseInt(totalShipmentsPreviousResult.rows[0]?.total || '0')
+    const deliveredPreviousWeek = parseInt(deliveredPreviousWeekResult.rows[0]?.total || '0')
+    
+    // Helper function to calculate percentage growth
+    const calculateGrowth = (current: number, previous: number): number => {
+      if (previous === 0) {
+        return current > 0 ? 100 : 0 // 100% growth if we had 0 before and now have something
+      }
+      return Math.round(((current - previous) / previous) * 100)
+    }
+    
+    // Calculate actual growth percentages using historical data
+    const shipmentsGrowth = calculateGrowth(totalShipments, totalShipmentsPrevious)
+    const deliveriesGrowth = calculateGrowth(deliveredThisWeek, deliveredPreviousWeek)
+    
     // Status distribution with colors
     const statusColors: Record<string, string> = {
       'DELIVERED': '#10B981',
@@ -150,10 +166,6 @@ export async function GET(request: NextRequest) {
       month: row.month,
       revenue: parseFloat(row.revenue || '0')
     }))
-
-    // Calculate growth percentages (mock for now, would need historical data)
-    const shipmentsGrowth = totalShipments > 0 ? Math.floor(Math.random() * 20) - 5 : 0 // -5% to +15%
-    const deliveriesGrowth = deliveredThisWeek > 0 ? Math.floor(Math.random() * 10) : 0
 
     const analytics = {
       kpis: {
