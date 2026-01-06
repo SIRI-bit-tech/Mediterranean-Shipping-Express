@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
 
-export async function POST(request: NextRequest, { params }: { params: { trackingNumber: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ trackingNumber: string }> }) {
   try {
     // Verify authentication (admin or driver)
     const user = await requireAuth(request)
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest, { params }: { params: { trackin
       return NextResponse.json({ error: "Unauthorized - Admin or Driver access required" }, { status: 401 })
     }
 
-    const { trackingNumber } = params
+    const { trackingNumber } = await params
     const { status, location, city, country, latitude, longitude, notes } = await request.json()
 
     if (!status || !location) {
@@ -87,9 +87,9 @@ export async function POST(request: NextRequest, { params }: { params: { trackin
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: { trackingNumber: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ trackingNumber: string }> }) {
   try {
-    const { trackingNumber } = params
+    const { trackingNumber } = await params
 
     // Get all tracking checkpoints for this shipment
     const result = await query(

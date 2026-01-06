@@ -52,10 +52,11 @@ interface DeliveryData {
 }
 
 interface DeliveryDetailPageProps {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
-export default function DeliveryDetailPage({ params }: DeliveryDetailPageProps) {
+export default async function DeliveryDetailPage({ params }: DeliveryDetailPageProps) {
+  const { id } = await params
   const [notes, setNotes] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [delivery, setDelivery] = useState<DeliveryData | null>(null)

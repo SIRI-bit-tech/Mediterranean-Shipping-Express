@@ -25,6 +25,7 @@ export function AdminLoginForm() {
       const response = await fetch("/api/admin/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'include', // Include cookies in the request
         body: JSON.stringify({ email, password, adminCode }),
       })
 
@@ -35,8 +36,8 @@ export function AdminLoginForm() {
         return
       }
 
-      localStorage.setItem("token", data.token)
-      localStorage.setItem("user", JSON.stringify(data.admin))
+      // No need to store tokens in localStorage - they're now in secure cookies
+      // Redirect to admin dashboard
       window.location.href = "/admin"
     } catch (err) {
       setError("An error occurred. Please try again.")

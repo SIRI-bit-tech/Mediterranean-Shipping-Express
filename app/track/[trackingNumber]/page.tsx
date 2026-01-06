@@ -10,10 +10,11 @@ import { useState, useEffect } from "react"
 import type { Shipment } from "@/lib/types/global"
 
 interface TrackingPageProps {
-  params: { trackingNumber: string }
+  params: Promise<{ trackingNumber: string }>
 }
 
-export default function TrackingDetailPage({ params }: TrackingPageProps) {
+export default async function TrackingDetailPage({ params }: TrackingPageProps) {
+  const { trackingNumber } = await params
   const [shipment, setShipment] = useState<Shipment | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -66,7 +67,7 @@ export default function TrackingDetailPage({ params }: TrackingPageProps) {
       <div className="flex-1 mx-auto max-w-4xl w-full px-4 sm:px-6 lg:px-8 py-12">
         {/* Real-time Card */}
         <div className="mb-8">
-          <RealTimeTrackingCard trackingNumber={params.trackingNumber} initialStatus={shipment.status} />
+          <RealTimeTrackingCard trackingNumber={trackingNumber} initialStatus={shipment.status} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">

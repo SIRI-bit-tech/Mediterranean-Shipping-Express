@@ -2,9 +2,9 @@ import { type NextRequest, NextResponse } from "next/server"
 import { handleAPIError, ValidationError, NotFoundError } from "@/lib/api-errors"
 import { query } from "@/lib/db"
 
-export async function GET(request: NextRequest, { params }: { params: { trackingNumber: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ trackingNumber: string }> }) {
   try {
-    const { trackingNumber } = params
+    const { trackingNumber } = await params
 
     if (!trackingNumber || trackingNumber.trim().length === 0) {
       throw new ValidationError("Tracking number is required")

@@ -1,9 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
 
-export async function GET(request: NextRequest, { params }: { params: { trackingNumber: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ trackingNumber: string }> }) {
   try {
-    const { trackingNumber } = params
+    const { trackingNumber } = await params
 
     // Get tracking checkpoints from database
     const result = await query(
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: { tracking
         `${checkpoint.city}, ${checkpoint.country}` : 
         checkpoint.location,
       timestamp: checkpoint.timestamp,
-      status: "completed",
+      status: normalizeStatusForFrontend(checkpoint.status),
       details: checkpoint.notes || getStatusDescription(checkpoint.status),
     }))
 
@@ -53,6 +53,20 @@ function formatStatusEvent(status: string): string {
     'EXCEPTION': 'Delivery Exception',
   }
   return statusMap[status] || status
+}
+
+function normalizeStatusForFrontend(status: string): string {
+  // Convert database status to frontend-expected format
+  const statusMap: Record<string, string> = {
+    'PROCESSING': 'processing',
+    'IN_TRANSIT': 'in-transit',
+    'IN_CUSTOMS': 'in-customs',
+    'OUT_FOR_DELIVERY': 'out-for-delivery',
+    'DELIVERED': 'completed',
+    'ON_HOLD': 'on-hold',
+    'EXCEPTION': 'exception',
+  }
+  return statusMap[status] || status.toLowerCase().replace('_', '-')
 }
 
 function getStatusDescription(status: string): string {

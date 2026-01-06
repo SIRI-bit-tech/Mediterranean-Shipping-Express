@@ -4,7 +4,7 @@ import { requireAdminAuth } from "@/lib/auth"
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     // Verify admin authentication
@@ -14,14 +14,14 @@ export async function PUT(
     }
 
     const { role } = await request.json()
-    const { userId } = params
+    const { userId } = await params
 
     if (!role || !['CUSTOMER', 'DRIVER', 'ADMIN'].includes(role)) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 })
     }
 
     // Prevent admin from demoting themselves
-    if (admin.id === userId && role !== 'ADMIN') {
+    if (String(admin.id) === String(userId) && role !== 'ADMIN') {
       return NextResponse.json({ error: "Cannot change your own admin role" }, { status: 400 })
     }
 

@@ -1,43 +1,94 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
-import { requireAuth } from "@/lib/auth"
+import { requireAuth, AuthUser } from "@/lib/auth"
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+// Define allowed shipment status values
+const ALLOWED_STATUSES = [
+  'PROCESSING',
+  'IN_TRANSIT', 
+  'OUT_FOR_DELIVERY',
+  'DELIVERED',
+  'ON_HOLD',
+  'EXCEPTION',
+  'IN_CUSTOMS'
+] as const
+
+type ShipmentStatus = typeof ALLOWED_STATUSES[number]
+
+interface ShipmentData {
+  id: string
+  tracking_number: string
+  user_id: string
+  driver_id: string | null
+  current_city: string | null
+  current_country: string | null
+}
+
+// Helper function to validate status
+function validateStatus(status: string): status is ShipmentStatus {
+  return ALLOWED_STATUSES.includes(status as ShipmentStatus)
+}
+
+// Helper function to verify authentication and authorize shipment access
+async function verifyAndAuthorizeShipment(
+  request: NextRequest, 
+  params: Promise<{ id: string }>
+): Promise<{ user: AuthUser; shipment: ShipmentData; id: string } | NextResponse> {
+  // Verify authentication
+  const user = await requireAuth(request)
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const { id } = await params
+
+  // Verify shipment exists and get data
+  const shipmentResult = await query(
+    'SELECT id, tracking_number, user_id, driver_id, current_city, current_country FROM shipments WHERE id = $1 AND deleted_at IS NULL',
+    [id]
+  )
+
+  if (shipmentResult.rows.length === 0) {
+    return NextResponse.json({ error: "Shipment not found" }, { status: 404 })
+  }
+
+  const shipment = shipmentResult.rows[0] as ShipmentData
+
+  // Check permissions: owner, assigned driver, or admin
+  const hasAccess = 
+    shipment.user_id === user.id || 
+    shipment.driver_id === user.id || 
+    user.role === 'ADMIN'
+
+  if (!hasAccess) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 })
+  }
+
+  return { user, shipment, id }
+}
+
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    // Verify authentication
-    const user = await requireAuth(request)
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Verify authentication and authorization
+    const authResult = await verifyAndAuthorizeShipment(request, params)
+    if (authResult instanceof NextResponse) {
+      return authResult
     }
+    const { user, shipment, id } = authResult
 
-    const { id } = params
     const { status, notes, location } = await request.json()
 
-    // Verify shipment exists and user has access (or is driver/admin)
-    const shipmentResult = await query(
-      'SELECT id, tracking_number, user_id, driver_id, current_city, current_country FROM shipments WHERE id = $1 AND deleted_at IS NULL',
-      [id]
-    )
-
-    if (shipmentResult.rows.length === 0) {
-      return NextResponse.json({ error: "Shipment not found" }, { status: 404 })
-    }
-
-    const shipment = shipmentResult.rows[0]
-
-    // Check permissions: owner, assigned driver, or admin
-    const hasAccess = 
-      shipment.user_id === user.id || 
-      shipment.driver_id === user.id || 
-      user.role === 'ADMIN'
-
-    if (!hasAccess) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+    // Validate status value
+    if (!status || !validateStatus(status)) {
+      return NextResponse.json({ 
+        error: "Invalid status value", 
+        allowedStatuses: ALLOWED_STATUSES 
+      }, { status: 400 })
     }
 
     // Update shipment status and delivery date if delivered
     const updateFields = ['status = $1', 'updated_at = NOW()']
-    const updateValues = [status]
+    const updateValues: (string | Date)[] = [status]
     let paramCount = 1
 
     if (location) {
@@ -120,37 +171,24 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    // Verify authentication
-    const user = await requireAuth(request)
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Verify authentication and authorization using shared helper
+    const authResult = await verifyAndAuthorizeShipment(request, params)
+    if (authResult instanceof NextResponse) {
+      return authResult
     }
+    const { user, shipment, id } = authResult
 
-    const { id } = params
     const { status, location } = await request.json()
 
-    // Verify shipment exists and user has access (or is driver/admin)
-    const shipmentResult = await query(
-      'SELECT id, tracking_number, user_id, driver_id FROM shipments WHERE id = $1 AND deleted_at IS NULL',
-      [id]
-    )
-
-    if (shipmentResult.rows.length === 0) {
-      return NextResponse.json({ success: false, message: "Shipment not found" }, { status: 404 })
-    }
-
-    const shipment = shipmentResult.rows[0]
-
-    // Check permissions: owner, assigned driver, or admin
-    const hasAccess = 
-      shipment.user_id === user.id || 
-      shipment.driver_id === user.id || 
-      user.role === 'ADMIN'
-
-    if (!hasAccess) {
-      return NextResponse.json({ success: false, message: "Access denied" }, { status: 403 })
+    // Validate status value using shared helper
+    if (!status || !validateStatus(status)) {
+      return NextResponse.json({ 
+        success: false, 
+        message: "Invalid status value", 
+        allowedStatuses: ALLOWED_STATUSES 
+      }, { status: 400 })
     }
 
     // Update shipment status

@@ -4,7 +4,7 @@ import { requireAdminAuth } from "@/lib/auth"
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { shipmentId: string } }
+  { params }: { params: Promise<{ shipmentId: string }> }
 ) {
   try {
     // Verify admin authentication
@@ -14,7 +14,7 @@ export async function PUT(
     }
 
     const { status } = await request.json()
-    const { shipmentId } = params
+    const { shipmentId } = await params
 
     const validStatuses = [
       'PROCESSING', 'IN_TRANSIT', 'IN_CUSTOMS', 'OUT_FOR_DELIVERY', 
@@ -30,7 +30,7 @@ export async function PUT(
       `UPDATE shipments 
        SET status = $1, updated_at = NOW() 
        WHERE id = $2 AND deleted_at IS NULL
-       RETURNING id, tracking_number, status`,
+       RETURNING id, tracking_number, status, user_id`,
       [status, shipmentId]
     )
 
@@ -49,6 +49,19 @@ export async function PUT(
         status, 
         'Admin Update', 
         `Status updated by admin: ${admin.name}`
+      ]
+    )
+
+    // Create notification for customer (mirror non-admin flow)
+    await query(
+      `INSERT INTO notifications (user_id, shipment_id, title, message, type, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [
+        shipment.user_id,
+        shipmentId,
+        `Shipment ${status.replace('_', ' ').toLowerCase()}`,
+        `Your package ${shipment.tracking_number} status has been updated to ${status.replace('_', ' ').toLowerCase()}.`,
+        'STATUS_UPDATE'
       ]
     )
 

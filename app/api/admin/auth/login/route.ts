@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { handleAPIError, ValidationError, UnauthorizedError } from "@/lib/api-errors"
 import { query } from "@/lib/db"
+import { signToken } from "@/lib/jwt"
 import bcrypt from "bcryptjs"
 
 export async function POST(request: NextRequest) {
@@ -43,17 +44,17 @@ export async function POST(request: NextRequest) {
       throw new UnauthorizedError()
     }
 
-    // Generate token
-    const token = Buffer.from(JSON.stringify({ 
-      id: admin.id, 
+    // Generate signed JWT token
+    const token = await signToken({
+      id: admin.id,
       role: admin.role,
-      exp: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
-    })).toString("base64")
+      email: admin.email
+    }, '24h')
 
-    return NextResponse.json(
+    // Create response with secure cookie
+    const response = NextResponse.json(
       {
         success: true,
-        token,
         admin: {
           id: admin.id,
           name: admin.name,
@@ -63,6 +64,31 @@ export async function POST(request: NextRequest) {
       },
       { status: 200 },
     )
+
+    // Set secure, httpOnly cookie with the token
+    response.cookies.set('auth-token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60, // 24 hours in seconds
+      path: '/'
+    })
+
+    // Also set user data in a separate cookie for client-side access
+    response.cookies.set('user-data', JSON.stringify({
+      id: admin.id,
+      name: admin.name,
+      email: admin.email,
+      role: admin.role,
+    }), {
+      httpOnly: false, // Allow client-side access for user info
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60, // 24 hours in seconds
+      path: '/'
+    })
+
+    return response
   } catch (error) {
     console.error('Admin login error:', error)
     const { statusCode, response } = handleAPIError(error)

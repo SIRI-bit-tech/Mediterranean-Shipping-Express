@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
+import { transformShipmentRows, ShipmentRow } from "@/lib/shipment-utils"
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,33 +25,7 @@ export async function GET(request: NextRequest) {
       [user.id]
     )
 
-    const shipments = result.rows.map(shipment => ({
-      id: shipment.id,
-      trackingNumber: shipment.tracking_number,
-      userId: shipment.user_id,
-      originAddressId: shipment.origin_address_id,
-      destinationAddressId: shipment.destination_address_id,
-      driverId: shipment.driver_id,
-      status: shipment.status,
-      transportMode: shipment.transport_mode,
-      currentLocation: shipment.current_location,
-      currentCity: shipment.current_city,
-      currentCountry: shipment.current_country,
-      currentLatitude: shipment.current_latitude,
-      currentLongitude: shipment.current_longitude,
-      estimatedDeliveryDate: shipment.estimated_delivery_date,
-      actualDeliveryDate: shipment.actual_delivery_date,
-      weight: shipment.weight,
-      dimensions: shipment.dimensions,
-      description: shipment.description,
-      packageValue: shipment.package_value,
-      specialHandling: shipment.special_handling,
-      onHoldReason: shipment.on_hold_reason,
-      isInternational: shipment.is_international,
-      customsStatus: shipment.customs_status,
-      createdAt: shipment.created_at,
-      updatedAt: shipment.updated_at,
-    }))
+    const shipments = transformShipmentRows(result.rows as ShipmentRow[])
 
     return NextResponse.json({
       success: true,

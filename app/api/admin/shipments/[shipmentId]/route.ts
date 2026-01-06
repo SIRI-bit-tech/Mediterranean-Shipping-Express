@@ -4,7 +4,7 @@ import { requireAdminAuth } from "@/lib/auth"
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { shipmentId: string } }
+  { params }: { params: Promise<{ shipmentId: string }> }
 ) {
   try {
     // Verify admin authentication
@@ -13,7 +13,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 })
     }
 
-    const { shipmentId } = params
+    const { shipmentId } = await params
 
     // Soft delete shipment (set deleted_at timestamp)
     const result = await query(

@@ -1,6 +1,7 @@
 // API utility functions for request/response handling
 
 import { NextResponse } from "next/server"
+import { signToken, verifyToken, JWTPayload } from "@/lib/jwt"
 
 export interface ApiErrorOptions {
   status?: number
@@ -62,21 +63,11 @@ export function generateTrackingNumber(): string {
   return result
 }
 
-export function createJWT(payload: Record<string, unknown>, expiresIn = "24h"): string {
-  // In production, use jsonwebtoken library with proper signing
-  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64")
-  const body = Buffer.from(JSON.stringify({ ...payload, iat: Date.now() })).toString("base64")
-  const signature = Buffer.from("signature").toString("base64")
-  return `${header}.${body}.${signature}`
+// Use secure JWT implementation from lib/jwt
+export async function createJWT(payload: Omit<JWTPayload, 'iat' | 'exp'>, expiresIn = "24h"): Promise<string> {
+  return await signToken(payload, expiresIn)
 }
 
-export function verifyJWT(token: string): Record<string, unknown> | null {
-  try {
-    const parts = token.split(".")
-    if (parts.length !== 3) return null
-    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString())
-    return payload
-  } catch {
-    return null
-  }
+export async function verifyJWT(token: string): Promise<JWTPayload | null> {
+  return await verifyToken(token)
 }
