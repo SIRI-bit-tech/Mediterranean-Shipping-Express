@@ -5,60 +5,38 @@ import { Shield, User, LogOut, Settings, BarChart3, Users, Package } from "lucid
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 
-// Safe parser for user data from cookies
-function parseUserFromCookie(): User | null {
-  try {
-    // Check if we're in a browser environment (not SSR)
-    if (typeof window === "undefined" || typeof document === "undefined") {
-      return null
-    }
-
-    // Get user data from cookie
-    const cookies = document.cookie.split(';')
-    const userCookie = cookies.find(cookie => cookie.trim().startsWith('user-data='))
-    
-    if (!userCookie) {
-      return null
-    }
-
-    const userData = decodeURIComponent(userCookie.split('=')[1])
-    const parsed = JSON.parse(userData)
-    
-    // Validate required fields
-    if (
-      typeof parsed.id === 'string' &&
-      typeof parsed.email === 'string' &&
-      typeof parsed.name === 'string' &&
-      typeof parsed.role === 'string' &&
-      ['CUSTOMER', 'DRIVER', 'ADMIN'].includes(parsed.role)
-    ) {
-      return parsed as User
-    }
-    
-    return null
-  } catch {
-    return null
-  }
+interface User {
+  id: string
+  name: string
+  email: string
+  role: 'CUSTOMER' | 'DRIVER' | 'ADMIN'
 }
 
 export function AdminHeader() {
   const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    try {
-      // Check if we're in a browser environment (not SSR)
-      if (typeof window === "undefined") {
-        return
-      }
+    const fetchUserProfile = async () => {
+      try {
+        const response = await fetch("/api/admin/profile", {
+          credentials: 'include' // Include httpOnly cookies
+        })
 
-      // Get user data from secure cookie
-      const parsedUser = parseUserFromCookie()
-      if (parsedUser) {
-        setUser(parsedUser)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.user) {
+            setUser(data.user)
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch user profile:", error)
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error("Failed to load user data from cookie:", error)
     }
+
+    fetchUserProfile()
   }, [])
 
   const handleLogout = async () => {
@@ -71,9 +49,8 @@ export function AdminHeader() {
     } catch (error) {
       console.error("Logout error:", error)
     } finally {
-      // Clear client-side cookies as fallback
+      // Clear any remaining client-side cookies as fallback
       document.cookie = 'auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-      document.cookie = 'user-data=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
       window.location.href = "/"
     }
   }
@@ -124,12 +101,15 @@ export function AdminHeader() {
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-2 text-sm text-gray-600">
               <User className="h-4 w-4" />
-              <span>Admin: {user?.name || 'Administrator'}</span>
+              <span>
+                {loading ? 'Loading...' : `Admin: ${user?.name || 'Administrator'}`}
+              </span>
             </div>
             <Button 
               variant="ghost" 
               className="text-black hover:bg-gray-100 gap-2" 
               onClick={handleLogout}
+              disabled={loading}
             >
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Logout</span>

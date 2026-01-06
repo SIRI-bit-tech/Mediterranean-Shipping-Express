@@ -1,8 +1,28 @@
 import { jwtVerify, SignJWT } from 'jose'
+import { randomBytes } from 'crypto'
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production'
-)
+// Ensure JWT_SECRET is properly configured
+function getJWTSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET
+  
+  if (secret) {
+    return new TextEncoder().encode(secret)
+  }
+  
+  // Only allow fallback in development with a strong random value
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('⚠️  JWT_SECRET not set in development - using random secret (tokens will not persist across restarts)')
+    return randomBytes(32) // 256-bit random secret
+  }
+  
+  // Fail hard in production if JWT_SECRET is missing
+  throw new Error(
+    'JWT_SECRET environment variable is required for production. ' +
+    'Please set a strong, random secret (minimum 32 characters) in your environment variables.'
+  )
+}
+
+const JWT_SECRET = getJWTSecret()
 
 export interface JWTPayload {
   id: string

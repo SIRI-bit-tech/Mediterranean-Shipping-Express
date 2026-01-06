@@ -47,10 +47,10 @@ export async function POST(request: NextRequest) {
       [user.id]
     )
 
-    return NextResponse.json(
+    // Create response with secure cookie
+    const response = NextResponse.json(
       {
         success: true,
-        token,
         user: {
           id: user.id,
           name: user.name,
@@ -62,6 +62,17 @@ export async function POST(request: NextRequest) {
       },
       { status: 200 },
     )
+
+    // Set secure, httpOnly cookie with the token
+    response.cookies.set('auth-token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60, // 30 days or 24 hours in seconds
+      path: '/'
+    })
+
+    return response
   } catch (error) {
     console.error('Login error:', error)
     const { statusCode, response } = handleAPIError(error)

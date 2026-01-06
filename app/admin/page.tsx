@@ -1,6 +1,6 @@
 "use client"
 
-/// <reference path="../lib/types/global.d.ts" />
+/// <reference path="../../lib/types/global.d.ts" />
 
 import { useState, useEffect } from "react"
 import { AdminHeader } from "@/components/admin-header"

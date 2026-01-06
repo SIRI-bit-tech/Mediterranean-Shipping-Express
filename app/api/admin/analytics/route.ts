@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 })
     }
 
-    // Get KPI data
+    // Get KPI data with historical comparisons
     const [
       totalShipmentsResult,
       deliveredThisWeekResult,
@@ -18,7 +18,10 @@ export async function GET(request: NextRequest) {
       avgDeliveryTimeResult,
       statusDistributionResult,
       dailyDeliveriesResult,
-      monthlyRevenueResult
+      monthlyRevenueResult,
+      // Historical data for growth calculations
+      totalShipmentsPreviousResult,
+      deliveredPreviousWeekResult
     ] = await Promise.all([
       // Total shipments
       query('SELECT COUNT(*) as total FROM shipments WHERE deleted_at IS NULL'),
@@ -87,6 +90,25 @@ export async function GET(request: NextRequest) {
         AND deleted_at IS NULL
         GROUP BY DATE_TRUNC('month', created_at), TO_CHAR(created_at, 'Mon')
         ORDER BY DATE_TRUNC('month', created_at)
+      `),
+      
+      // Total shipments from previous month for growth calculation
+      query(`
+        SELECT COUNT(*) as total 
+        FROM shipments 
+        WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+        AND created_at < DATE_TRUNC('month', CURRENT_DATE)
+        AND deleted_at IS NULL
+      `),
+      
+      // Delivered previous week for growth calculation
+      query(`
+        SELECT COUNT(*) as total 
+        FROM shipments 
+        WHERE status = 'DELIVERED' 
+        AND actual_delivery_date >= DATE_TRUNC('week', CURRENT_DATE - INTERVAL '1 week')
+        AND actual_delivery_date < DATE_TRUNC('week', CURRENT_DATE)
+        AND deleted_at IS NULL
       `)
     ])
 
