@@ -25,6 +25,7 @@ export function UserLoginForm() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'include', // Include cookies in the request
         body: JSON.stringify({ email, password, rememberMe }),
       })
 
@@ -35,8 +36,8 @@ export function UserLoginForm() {
         return
       }
 
-      localStorage.setItem("token", data.token)
-      localStorage.setItem("user", JSON.stringify(data.user))
+      // No need to store tokens in localStorage - they're now in secure cookies
+      // Redirect to dashboard
       window.location.href = "/dashboard"
     } catch (err) {
       setError("An error occurred. Please try again.")

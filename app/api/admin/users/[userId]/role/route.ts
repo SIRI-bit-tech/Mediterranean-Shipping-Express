@@ -21,7 +21,7 @@ export async function PUT(
     }
 
     // Prevent admin from demoting themselves
-    if (String(admin.id) === String(userId) && role !== 'ADMIN') {
+    if (admin.id === userId && role !== 'ADMIN') {
       return NextResponse.json({ error: "Cannot change your own admin role" }, { status: 400 })
     }
 

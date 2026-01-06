@@ -58,15 +58,9 @@ export function AdminAnalytics() {
 
   const fetchAnalytics = async () => {
     try {
-      const token = localStorage.getItem('token')
-      if (!token) {
-        setError('Authentication required')
-        return
-      }
-
       const response = await fetch('/api/admin/analytics', {
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       })

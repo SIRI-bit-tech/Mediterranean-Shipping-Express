@@ -74,20 +74,6 @@ export async function POST(request: NextRequest) {
       path: '/'
     })
 
-    // Also set user data in a separate cookie for client-side access
-    response.cookies.set('user-data', JSON.stringify({
-      id: admin.id,
-      name: admin.name,
-      email: admin.email,
-      role: admin.role,
-    }), {
-      httpOnly: false, // Allow client-side access for user info
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 24 * 60 * 60, // 24 hours in seconds
-      path: '/'
-    })
-
     return response
   } catch (error) {
     console.error('Admin login error:', error)
