@@ -5,22 +5,77 @@ import { Shield, User, LogOut, Settings, BarChart3, Users, Package } from "lucid
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 
+// Safe parser for user data from cookies
+function parseUserFromCookie(): User | null {
+  try {
+    // Check if we're in a browser environment (not SSR)
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return null
+    }
+
+    // Get user data from cookie
+    const cookies = document.cookie.split(';')
+    const userCookie = cookies.find(cookie => cookie.trim().startsWith('user-data='))
+    
+    if (!userCookie) {
+      return null
+    }
+
+    const userData = decodeURIComponent(userCookie.split('=')[1])
+    const parsed = JSON.parse(userData)
+    
+    // Validate required fields
+    if (
+      typeof parsed.id === 'string' &&
+      typeof parsed.email === 'string' &&
+      typeof parsed.name === 'string' &&
+      typeof parsed.role === 'string' &&
+      ['CUSTOMER', 'DRIVER', 'ADMIN'].includes(parsed.role)
+    ) {
+      return parsed as User
+    }
+    
+    return null
+  } catch {
+    return null
+  }
+}
+
 export function AdminHeader() {
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
 
   useEffect(() => {
-    // Check for authentication on component mount
-    const userData = localStorage.getItem("user")
-    
-    if (userData) {
-      setUser(JSON.parse(userData))
+    try {
+      // Check if we're in a browser environment (not SSR)
+      if (typeof window === "undefined") {
+        return
+      }
+
+      // Get user data from secure cookie
+      const parsedUser = parseUserFromCookie()
+      if (parsedUser) {
+        setUser(parsedUser)
+      }
+    } catch (error) {
+      console.error("Failed to load user data from cookie:", error)
     }
   }, [])
 
-  const handleLogout = () => {
-    localStorage.removeItem("token")
-    localStorage.removeItem("user")
-    window.location.href = "/"
+  const handleLogout = async () => {
+    try {
+      // Call logout endpoint to clear server-side cookies
+      await fetch("/api/admin/auth/logout", {
+        method: "POST",
+        credentials: 'include'
+      })
+    } catch (error) {
+      console.error("Logout error:", error)
+    } finally {
+      // Clear client-side cookies as fallback
+      document.cookie = 'auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+      document.cookie = 'user-data=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+      window.location.href = "/"
+    }
   }
 
   return (

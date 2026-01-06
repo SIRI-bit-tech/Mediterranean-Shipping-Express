@@ -1,5 +1,7 @@
 "use client"
 
+/// <reference path="../lib/types/global.d.ts" />
+
 import { useState, useEffect } from "react"
 import { AdminHeader } from "@/components/admin-header"
 import { MSEFooter } from "@/components/mse-footer"
@@ -10,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AdminShipmentTable } from "@/components/admin-shipment-table"
 import { AdminAnalytics } from "@/components/admin-analytics"
-import { Search, Filter, Download, Shield, LogOut, Loader2, AlertCircle } from "lucide-react"
+import { Search, Filter, Download, Shield, Loader2, AlertCircle } from "lucide-react"
 
 export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState("")

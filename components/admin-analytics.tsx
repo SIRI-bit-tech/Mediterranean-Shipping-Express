@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import {
   LineChart,
@@ -15,36 +16,106 @@ import {
   Pie,
   Cell,
 } from "recharts"
-import { TrendingUp, Package, Users, Truck } from "lucide-react"
+import { TrendingUp, Package, Users, Truck, Loader2, AlertCircle } from "lucide-react"
 
-const deliveryData = [
-  { day: "Mon", deliveries: 45 },
-  { day: "Tue", deliveries: 52 },
-  { day: "Wed", deliveries: 48 },
-  { day: "Thu", deliveries: 61 },
-  { day: "Fri", deliveries: 55 },
-  { day: "Sat", deliveries: 42 },
-  { day: "Sun", deliveries: 38 },
-]
-
-const statusData = [
-  { name: "Delivered", value: 320, color: "#10B981" },
-  { name: "In Transit", value: 145, color: "#F59E0B" },
-  { name: "Processing", value: 89, color: "#3B82F6" },
-  { name: "On Hold", value: 34, color: "#FFB700" },
-  { name: "Exception", value: 12, color: "#EF4444" },
-]
-
-const revenueData = [
-  { month: "Jan", revenue: 12500 },
-  { month: "Feb", revenue: 15300 },
-  { month: "Mar", revenue: 18200 },
-  { month: "Apr", revenue: 21500 },
-  { month: "May", revenue: 24100 },
-  { month: "Jun", revenue: 27600 },
-]
+interface AnalyticsData {
+  kpis: {
+    totalShipments: {
+      value: number
+      growth: number
+      label: string
+    }
+    deliveredThisWeek: {
+      value: number
+      growth: number
+      label: string
+    }
+    activeDrivers: {
+      value: number
+      onDuty: number
+      label: string
+    }
+    avgDeliveryTime: {
+      value: string
+      label: string
+    }
+  }
+  charts: {
+    dailyDeliveries: Array<{ day: string; deliveries: number }>
+    statusDistribution: Array<{ name: string; value: number; color: string }>
+    monthlyRevenue: Array<{ month: string; revenue: number }>
+  }
+}
 
 export function AdminAnalytics() {
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchAnalytics()
+  }, [])
+
+  const fetchAnalytics = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        setError('Authentication required')
+        return
+      }
+
+      const response = await fetch('/api/admin/analytics', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch analytics')
+      }
+
+      const data = await response.json()
+      if (data.success) {
+        setAnalytics(data.data)
+      } else {
+        throw new Error(data.error || 'Failed to load analytics')
+      }
+    } catch (err) {
+      console.error('Analytics fetch error:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load analytics')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-gray-600" />
+          <p className="text-gray-600">Loading analytics...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !analytics) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <AlertCircle className="h-8 w-8 mx-auto mb-4 text-red-600" />
+          <p className="text-red-600 mb-4">{error || 'Failed to load analytics'}</p>
+          <button 
+            onClick={fetchAnalytics}
+            className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-900"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
@@ -54,12 +125,16 @@ export function AdminAnalytics() {
             <Package className="h-6 w-6 text-blue-600" />
           </div>
           <div>
-            <p className="text-gray-600 text-sm">Total Shipments</p>
-            <p className="text-2xl font-bold text-black mt-1">1,247</p>
-            <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" />
-              +12% from last month
-            </p>
+            <p className="text-gray-600 text-sm">{analytics.kpis.totalShipments.label}</p>
+            <p className="text-2xl font-bold text-black mt-1">{analytics.kpis.totalShipments.value.toLocaleString()}</p>
+            {analytics.kpis.totalShipments.growth !== 0 && (
+              <p className={`text-xs mt-1 flex items-center gap-1 ${
+                analytics.kpis.totalShipments.growth > 0 ? 'text-green-600' : 'text-red-600'
+              }`}>
+                <TrendingUp className="h-3 w-3" />
+                {analytics.kpis.totalShipments.growth > 0 ? '+' : ''}{analytics.kpis.totalShipments.growth}% from last month
+              </p>
+            )}
           </div>
         </Card>
 
@@ -68,9 +143,11 @@ export function AdminAnalytics() {
             <TrendingUp className="h-6 w-6 text-green-600" />
           </div>
           <div>
-            <p className="text-gray-600 text-sm">Delivered This Week</p>
-            <p className="text-2xl font-bold text-black mt-1">341</p>
-            <p className="text-xs text-gray-500 mt-1">+8 since yesterday</p>
+            <p className="text-gray-600 text-sm">{analytics.kpis.deliveredThisWeek.label}</p>
+            <p className="text-2xl font-bold text-black mt-1">{analytics.kpis.deliveredThisWeek.value}</p>
+            {analytics.kpis.deliveredThisWeek.growth > 0 && (
+              <p className="text-xs text-green-600 mt-1">+{analytics.kpis.deliveredThisWeek.growth} since yesterday</p>
+            )}
           </div>
         </Card>
 
@@ -79,9 +156,9 @@ export function AdminAnalytics() {
             <Users className="h-6 w-6 text-purple-600" />
           </div>
           <div>
-            <p className="text-gray-600 text-sm">Active Drivers</p>
-            <p className="text-2xl font-bold text-black mt-1">89</p>
-            <p className="text-xs text-green-600 mt-1">42 on duty</p>
+            <p className="text-gray-600 text-sm">{analytics.kpis.activeDrivers.label}</p>
+            <p className="text-2xl font-bold text-black mt-1">{analytics.kpis.activeDrivers.value}</p>
+            <p className="text-xs text-green-600 mt-1">{analytics.kpis.activeDrivers.onDuty} on duty</p>
           </div>
         </Card>
 
@@ -90,9 +167,9 @@ export function AdminAnalytics() {
             <Truck className="h-6 w-6 text-yellow-600" />
           </div>
           <div>
-            <p className="text-gray-600 text-sm">Avg Delivery Time</p>
-            <p className="text-2xl font-bold text-black mt-1">2.3 days</p>
-            <p className="text-xs text-gray-500 mt-1">International avg</p>
+            <p className="text-gray-600 text-sm">{analytics.kpis.avgDeliveryTime.label}</p>
+            <p className="text-2xl font-bold text-black mt-1">{analytics.kpis.avgDeliveryTime.value}</p>
+            <p className="text-xs text-gray-500 mt-1">Last 30 days</p>
           </div>
         </Card>
       </div>
@@ -103,7 +180,7 @@ export function AdminAnalytics() {
         <Card className="p-6">
           <h3 className="font-semibold text-black mb-4">Deliveries This Week</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={deliveryData}>
+            <LineChart data={analytics.charts.dailyDeliveries}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E5E5E5" />
               <XAxis dataKey="day" stroke="#666666" />
               <YAxis stroke="#666666" />
@@ -125,7 +202,7 @@ export function AdminAnalytics() {
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
-                data={statusData}
+                data={analytics.charts.statusDistribution}
                 cx="50%"
                 cy="50%"
                 labelLine={false}
@@ -134,7 +211,7 @@ export function AdminAnalytics() {
                 fill="#8884d8"
                 dataKey="value"
               >
-                {statusData.map((entry, index) => (
+                {analytics.charts.statusDistribution.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
@@ -146,9 +223,9 @@ export function AdminAnalytics() {
 
       {/* Revenue Chart */}
       <Card className="p-6">
-        <h3 className="font-semibold text-black mb-4">Monthly Revenue</h3>
+        <h3 className="font-semibold text-black mb-4">Monthly Revenue (Package Values)</h3>
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={revenueData}>
+          <BarChart data={analytics.charts.monthlyRevenue}>
             <CartesianGrid strokeDasharray="3 3" stroke="#E5E5E5" />
             <XAxis dataKey="month" stroke="#666666" />
             <YAxis stroke="#666666" />
@@ -158,6 +235,7 @@ export function AdminAnalytics() {
                 border: "1px solid #E5E5E5",
                 borderRadius: "8px",
               }}
+              formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
             />
             <Bar dataKey="revenue" fill="#FFB700" radius={[8, 8, 0, 0]} />
           </BarChart>

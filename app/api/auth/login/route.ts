@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { handleAPIError, ValidationError, UnauthorizedError } from "@/lib/api-errors"
 import { query } from "@/lib/db"
+import { signToken } from "@/lib/jwt"
 import bcrypt from "bcryptjs"
 
 export async function POST(request: NextRequest) {
@@ -33,12 +34,12 @@ export async function POST(request: NextRequest) {
       throw new UnauthorizedError()
     }
 
-    // Generate token
-    const token = Buffer.from(JSON.stringify({ 
-      id: user.id, 
+    // Generate signed JWT token
+    const token = await signToken({
+      id: user.id,
       role: user.role,
-      exp: Date.now() + (rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000) // 30 days if remember me, else 24 hours
-    })).toString("base64")
+      email: user.email
+    }, rememberMe ? '30d' : '24h')
 
     // Update last login
     await query(

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
 import { query } from "@/lib/db"
+import { verifyToken as verifyJWT, JWTPayload } from "@/lib/jwt"
 
 export interface AuthUser {
   id: string
@@ -10,15 +11,14 @@ export interface AuthUser {
 
 export async function verifyToken(token: string): Promise<AuthUser | null> {
   try {
-    // Decode the base64 token
-    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'))
+    // Verify the JWT token using cryptographic verification
+    const decoded: JWTPayload | null = await verifyJWT(token)
     
-    // Check if token is expired
-    if (decoded.exp && decoded.exp < Date.now()) {
+    if (!decoded) {
       return null
     }
 
-    // Verify user exists in database
+    // Verify user exists in database and get current user data
     const result = await query(
       'SELECT id, name, email, role FROM users WHERE id = $1 AND is_active = true',
       [decoded.id]
@@ -28,7 +28,16 @@ export async function verifyToken(token: string): Promise<AuthUser | null> {
       return null
     }
 
-    return result.rows[0] as AuthUser
+    const user = result.rows[0] as AuthUser
+
+    // Verify that the role in the token matches the database
+    // This prevents privilege escalation if someone tries to modify the token
+    if (user.role !== decoded.role) {
+      console.warn(`Role mismatch for user ${user.id}: token=${decoded.role}, db=${user.role}`)
+      return null
+    }
+
+    return user
   } catch (error) {
     console.error('Token verification error:', error)
     return null

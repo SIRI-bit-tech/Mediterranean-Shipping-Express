@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
+import { signToken } from "@/lib/jwt"
 import bcrypt from "bcryptjs"
 
 export async function POST(request: NextRequest) {
@@ -43,12 +44,12 @@ export async function POST(request: NextRequest) {
 
     const admin = result.rows[0]
 
-    // Generate token
-    const token = Buffer.from(JSON.stringify({ 
-      id: admin.id, 
+    // Generate signed JWT token
+    const token = await signToken({
+      id: admin.id,
       role: admin.role,
-      exp: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
-    })).toString("base64")
+      email: admin.email
+    }, '24h')
 
     return NextResponse.json({
       success: true,
