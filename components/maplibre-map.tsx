@@ -1,0 +1,398 @@
+"use client"
+
+import { useEffect, useRef, useState } from "react"
+import maplibregl from "maplibre-gl"
+import "maplibre-gl/dist/maplibre-gl.css"
+import { graphHopperService, type Coordinates, type RouteResult } from "@/lib/graphhopper-service"
+
+interface MapLibreMapProps {
+  shipmentLocation?: {
+    latitude: number
+    longitude: number
+    city: string
+    country: string
+  }
+  originLocation?: {
+    latitude: number
+    longitude: number
+    address?: string
+  }
+  destinationLocation?: {
+    latitude: number
+    longitude: number
+    address?: string
+  }
+  driverLocation?: {
+    latitude: number
+    longitude: number
+  }
+  showRoute?: boolean
+  onRouteCalculated?: (route: RouteResult) => void
+  className?: string
+  style?: React.CSSProperties
+}
+
+export function MapLibreMap({
+  shipmentLocation,
+  originLocation,
+  destinationLocation,
+  driverLocation,
+  showRoute = true,
+  onRouteCalculated,
+  className = "w-full h-full rounded-lg overflow-hidden",
+  style = { minHeight: "400px" }
+}: MapLibreMapProps) {
+  const mapContainer = useRef<HTMLDivElement>(null)
+  const map = useRef<maplibregl.Map | null>(null)
+  const [isLoaded, setIsLoaded] = useState(false)
+  const markersRef = useRef<maplibregl.Marker[]>([])
+  const routeSourceId = 'route-source'
+  const routeLayerId = 'route-layer'
+  const onRouteCalculatedRef = useRef(onRouteCalculated)
+
+  // Update the callback ref when it changes
+  useEffect(() => {
+    onRouteCalculatedRef.current = onRouteCalculated
+  }, [onRouteCalculated])
+
+  // Initialize map
+  useEffect(() => {
+    if (!mapContainer.current || map.current) return
+
+    // Default center (Mediterranean Sea area for MSE branding)
+    const defaultCenter: [number, number] = [18.0, 35.0] // [lng, lat]
+    const defaultZoom = 6
+
+    // Determine map center and zoom based on available locations
+    const getMapCenter = (): [number, number] => {
+      if (shipmentLocation) {
+        return [shipmentLocation.longitude, shipmentLocation.latitude]
+      }
+      if (originLocation) {
+        return [originLocation.longitude, originLocation.latitude]
+      }
+      return defaultCenter
+    }
+
+    const getMapZoom = (): number => {
+      if (shipmentLocation || originLocation || destinationLocation) {
+        return 10
+      }
+      return defaultZoom
+    }
+
+    // Initialize MapLibre GL map
+    map.current = new maplibregl.Map({
+      container: mapContainer.current,
+      style: {
+        version: 8,
+        sources: {
+          'osm-tiles': {
+            type: 'raster',
+            tiles: [
+              'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+              'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+              'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+            ],
+            tileSize: 256,
+            attribution: '© OpenStreetMap contributors'
+          }
+        },
+        layers: [
+          {
+            id: 'osm-tiles-layer',
+            type: 'raster',
+            source: 'osm-tiles'
+          }
+        ]
+      },
+      center: getMapCenter(),
+      zoom: getMapZoom(),
+      attributionControl: false // We'll add it manually
+    })
+
+    // Add navigation controls
+    map.current.addControl(new maplibregl.NavigationControl(), 'top-right')
+
+    // Add attribution control
+    map.current.addControl(new maplibregl.AttributionControl(), 'bottom-right')
+
+    // Add scale control
+    map.current.addControl(new maplibregl.ScaleControl(), 'bottom-left')
+
+    // Set loaded state when map is ready
+    map.current.on('load', () => {
+      setIsLoaded(true)
+    })
+
+    // Cleanup function
+    return () => {
+      if (map.current) {
+        map.current.remove()
+        map.current = null
+      }
+    }
+  }, [])
+
+  // Update markers when locations change
+  useEffect(() => {
+    if (!map.current || !isLoaded) return
+
+    // Clear existing markers
+    markersRef.current.forEach(marker => marker.remove())
+    markersRef.current = []
+
+    // Create custom marker elements
+    const createMarkerElement = (color: string, label: string) => {
+      const el = document.createElement('div')
+      el.className = 'custom-marker'
+      el.style.cssText = `
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background-color: ${color};
+        border: 3px solid white;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 12px;
+        color: white;
+      `
+      el.textContent = label
+      return el
+    }
+
+    // Add origin marker
+    if (originLocation) {
+      const originMarker = new maplibregl.Marker({
+        element: createMarkerElement('#10B981', 'O'),
+        anchor: 'center'
+      })
+        .setLngLat([originLocation.longitude, originLocation.latitude])
+        .setPopup(
+          new maplibregl.Popup({ offset: 25 }).setHTML(
+            `<div><strong>Origin</strong>${originLocation.address ? '<br/>' + originLocation.address : ''}</div>`
+          )
+        )
+        .addTo(map.current)
+
+      markersRef.current.push(originMarker)
+    }
+
+    // Add current shipment location marker
+    if (shipmentLocation) {
+      const shipmentMarker = new maplibregl.Marker({
+        element: createMarkerElement('#FFB700', 'S'),
+        anchor: 'center'
+      })
+        .setLngLat([shipmentLocation.longitude, shipmentLocation.latitude])
+        .setPopup(
+          new maplibregl.Popup({ offset: 25 }).setHTML(
+            `<div><strong>Current Location</strong><br/>${shipmentLocation.city}, ${shipmentLocation.country}</div>`
+          )
+        )
+        .addTo(map.current)
+
+      markersRef.current.push(shipmentMarker)
+    }
+
+    // Add destination marker
+    if (destinationLocation) {
+      const destMarker = new maplibregl.Marker({
+        element: createMarkerElement('#3B82F6', 'D'),
+        anchor: 'center'
+      })
+        .setLngLat([destinationLocation.longitude, destinationLocation.latitude])
+        .setPopup(
+          new maplibregl.Popup({ offset: 25 }).setHTML(
+            `<div><strong>Destination</strong>${destinationLocation.address ? '<br/>' + destinationLocation.address : ''}</div>`
+          )
+        )
+        .addTo(map.current)
+
+      markersRef.current.push(destMarker)
+    }
+
+    // Add driver location marker
+    if (driverLocation) {
+      const driverMarker = new maplibregl.Marker({
+        element: createMarkerElement('#EF4444', 'D'),
+        anchor: 'center'
+      })
+        .setLngLat([driverLocation.longitude, driverLocation.latitude])
+        .setPopup(
+          new maplibregl.Popup({ offset: 25 }).setHTML(
+            '<div><strong>Driver Location</strong></div>'
+          )
+        )
+        .addTo(map.current)
+
+      markersRef.current.push(driverMarker)
+    }
+
+    // Fit map to show all markers
+    if (markersRef.current.length > 1) {
+      const bounds = new maplibregl.LngLatBounds()
+      markersRef.current.forEach(marker => {
+        bounds.extend(marker.getLngLat())
+      })
+      map.current.fitBounds(bounds, { padding: 50 })
+    }
+  }, [isLoaded, originLocation, shipmentLocation, destinationLocation, driverLocation])
+
+  // Calculate and display route
+  useEffect(() => {
+    if (!map.current || !isLoaded || !showRoute || !originLocation || !destinationLocation) return
+
+    // Create a stable key for this route calculation to prevent duplicate calls
+    const routeKey = `${originLocation.latitude},${originLocation.longitude}-${destinationLocation.latitude},${destinationLocation.longitude}`
+    
+    // Check if we already calculated this route
+    if (map.current.getSource(routeSourceId)) {
+      const existingSource = map.current.getSource(routeSourceId) as any
+      if (existingSource._data?.properties?.routeKey === routeKey) {
+        return // Route already calculated for these coordinates
+      }
+    }
+
+    const calculateRoute = async () => {
+      try {
+        const route = await graphHopperService.getRoute(
+          { latitude: originLocation.latitude, longitude: originLocation.longitude },
+          { latitude: destinationLocation.latitude, longitude: destinationLocation.longitude },
+          'car'
+        )
+
+        if (!route) {
+          console.warn('Could not calculate route')
+          return
+        }
+
+        // Remove existing route layer and source
+        if (map.current!.getLayer(routeLayerId)) {
+          map.current!.removeLayer(routeLayerId)
+        }
+        if (map.current!.getSource(routeSourceId)) {
+          map.current!.removeSource(routeSourceId)
+        }
+
+        // Add route source with route key for deduplication
+        map.current!.addSource(routeSourceId, {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: { routeKey }, // Add route key to prevent duplicate calculations
+            geometry: {
+              type: 'LineString',
+              coordinates: route.coordinates
+            }
+          }
+        })
+
+        // Add route layer
+        map.current!.addLayer({
+          id: routeLayerId,
+          type: 'line',
+          source: routeSourceId,
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#FFB700',
+            'line-width': 4,
+            'line-opacity': 0.8
+          }
+        })
+
+        // Callback with route information (only call once per route)
+        if (onRouteCalculatedRef.current) {
+          onRouteCalculatedRef.current(route)
+        }
+
+        // Fit map to route bounds
+        const bounds = new maplibregl.LngLatBounds()
+        route.coordinates.forEach(coord => {
+          bounds.extend(coord as [number, number])
+        })
+        map.current!.fitBounds(bounds, { padding: 50 })
+
+      } catch (error) {
+        console.error('Error calculating route:', error)
+      }
+    }
+
+    calculateRoute()
+  }, [isLoaded, originLocation?.latitude, originLocation?.longitude, destinationLocation?.latitude, destinationLocation?.longitude, showRoute])
+
+  // Update driver location in real-time (for Socket.IO integration)
+  const updateDriverLocation = (newLocation: Coordinates) => {
+    if (!map.current || !isLoaded) return
+
+    // Find existing driver marker
+    const driverMarkerIndex = markersRef.current.findIndex(marker => {
+      const element = marker.getElement()
+      return element.textContent === 'D' && element.style.backgroundColor === 'rgb(239, 68, 68)'
+    })
+
+    if (driverMarkerIndex !== -1) {
+      // Update existing driver marker
+      markersRef.current[driverMarkerIndex].setLngLat([newLocation.longitude, newLocation.latitude])
+    } else {
+      // Create new driver marker
+      const createMarkerElement = (color: string, label: string) => {
+        const el = document.createElement('div')
+        el.className = 'custom-marker'
+        el.style.cssText = `
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          background-color: ${color};
+          border: 3px solid white;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: bold;
+          font-size: 12px;
+          color: white;
+        `
+        el.textContent = label
+        return el
+      }
+
+      const driverMarker = new maplibregl.Marker({
+        element: createMarkerElement('#EF4444', 'D'),
+        anchor: 'center'
+      })
+        .setLngLat([newLocation.longitude, newLocation.latitude])
+        .setPopup(
+          new maplibregl.Popup({ offset: 25 }).setHTML(
+            '<div><strong>Driver Location</strong><br/>Live Position</div>'
+          )
+        )
+        .addTo(map.current)
+
+      markersRef.current.push(driverMarker)
+    }
+  }
+
+  // Expose updateDriverLocation method via ref
+  useEffect(() => {
+    if (mapContainer.current) {
+      (mapContainer.current as any).updateDriverLocation = updateDriverLocation
+    }
+  }, [isLoaded])
+
+  return (
+    <div 
+      ref={mapContainer} 
+      className={className} 
+      style={style}
+    />
+  )
+}

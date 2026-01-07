@@ -11,22 +11,46 @@ export function MSEHeader() {
   const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
-    // Check for authentication on component mount
-    const token = localStorage.getItem("token")
-    const userData = localStorage.getItem("user")
-    
-    if (token && userData) {
-      setIsAuthenticated(true)
-      setUser(JSON.parse(userData))
+    // Check for authentication by calling a protected endpoint
+    const checkAuth = async () => {
+      try {
+        const response = await fetch("/api/shipments", {
+          credentials: 'include',
+          headers: {
+            "Content-Type": "application/json"
+          }
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          setIsAuthenticated(true)
+          // We could get user info from the response or make a separate call
+          // For now, just set authenticated state
+        }
+      } catch (error) {
+        // Not authenticated or error occurred
+        setIsAuthenticated(false)
+        setUser(null)
+      }
     }
+
+    checkAuth()
   }, [])
 
-  const handleLogout = () => {
-    localStorage.removeItem("token")
-    localStorage.removeItem("user")
-    setIsAuthenticated(false)
-    setUser(null)
-    window.location.href = "/"
+  const handleLogout = async () => {
+    try {
+      // Call logout endpoint to clear server-side cookies
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: 'include'
+      })
+    } catch (error) {
+      console.error("Logout error:", error)
+    } finally {
+      setIsAuthenticated(false)
+      setUser(null)
+      window.location.href = "/"
+    }
   }
 
   return (

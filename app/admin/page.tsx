@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AdminShipmentTable } from "@/components/admin-shipment-table"
+import { AdminShipmentEditModal } from "@/components/admin-shipment-edit-modal"
 import { AdminAnalytics } from "@/components/admin-analytics"
 import { Search, Filter, Download, Shield, Loader2, AlertCircle } from "lucide-react"
 
@@ -22,6 +23,8 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [editingShipment, setEditingShipment] = useState<Shipment | null>(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
 
   useEffect(() => {
     checkAdminAccess()
@@ -143,8 +146,39 @@ export default function AdminDashboard() {
   })
 
   const handleEdit = (shipment: Shipment) => {
-    console.log("Edit shipment:", shipment)
-    // Open edit modal/dialog
+    setEditingShipment(shipment)
+    setIsEditModalOpen(true)
+  }
+
+  const handleSaveShipment = async (updatedData: Partial<Shipment>) => {
+    if (!editingShipment) return
+
+    const token = localStorage.getItem("token")
+    const response = await fetch(`/api/admin/shipments/${editingShipment.id}`, {
+      method: "PUT",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(updatedData)
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || "Failed to update shipment")
+    }
+
+    const result = await response.json()
+    
+    // Update the shipments list with the updated shipment
+    setShipments(shipments.map(s => 
+      s.id === editingShipment.id ? result.shipment : s
+    ))
+  }
+
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false)
+    setEditingShipment(null)
   }
 
   const handleDelete = async (shipmentId: string) => {
@@ -450,6 +484,14 @@ export default function AdminDashboard() {
       </div>
 
       <MSEFooter />
+
+      {/* Edit Modal */}
+      <AdminShipmentEditModal
+        shipment={editingShipment}
+        isOpen={isEditModalOpen}
+        onClose={handleCloseEditModal}
+        onSave={handleSaveShipment}
+      />
     </main>
   )
 }

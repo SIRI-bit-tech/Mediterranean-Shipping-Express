@@ -33,52 +33,57 @@ export default function DashboardPage() {
   const [error, setError] = useState("")
 
   useEffect(() => {
-    const checkAuthAndRedirect = () => {
-      const token = localStorage.getItem("token")
-      const userData = localStorage.getItem("user")
-      
-      if (!token || !userData) {
-        window.location.href = "/auth/login"
-        return
-      }
+    const checkAuthAndFetchData = async () => {
+      try {
+        // Check authentication by calling a protected endpoint
+        const response = await fetch("/api/shipments", {
+          credentials: 'include', // Include cookies
+          headers: {
+            "Content-Type": "application/json"
+          }
+        })
 
-      const user = JSON.parse(userData)
-      
-      // Redirect based on user role
-      if (user.role === "DRIVER") {
-        window.location.href = "/driver"
-        return
-      } else if (user.role === "ADMIN") {
-        window.location.href = "/admin"
-        return
+        if (!response.ok) {
+          if (response.status === 401) {
+            // Not authenticated, redirect to login
+            window.location.href = "/auth/login"
+            return
+          }
+          throw new Error("Failed to fetch shipments")
+        }
+
+        const data = await response.json()
+        
+        // Check if user should be redirected based on role
+        // We can get user info from the response or make a separate call
+        // For now, assume CUSTOMER role if we can access shipments
+        
+        setShipments(data.shipments || [])
+        setLoading(false)
+      } catch (err) {
+        console.error("Error:", err)
+        setError("Failed to load dashboard")
+        setLoading(false)
       }
-      
-      // If CUSTOMER, continue to fetch shipments
-      fetchShipments()
     }
 
-    checkAuthAndRedirect()
+    checkAuthAndFetchData()
   }, [])
 
-  const fetchShipments = async () => {
+  const retryFetch = async () => {
+    setLoading(true)
+    setError("")
+    
     try {
-      const token = localStorage.getItem("token")
-      if (!token) {
-        window.location.href = "/auth/login"
-        return
-      }
-
       const response = await fetch("/api/shipments", {
+        credentials: 'include',
         headers: {
-          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         }
       })
 
       if (!response.ok) {
         if (response.status === 401) {
-          localStorage.removeItem("token")
-          localStorage.removeItem("user")
           window.location.href = "/auth/login"
           return
         }
@@ -147,7 +152,7 @@ export default function DashboardPage() {
             <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-black mb-2">Error Loading Dashboard</h2>
             <p className="text-gray-600 mb-4">{error}</p>
-            <Button onClick={fetchShipments} className="bg-black text-white hover:bg-gray-900">
+            <Button onClick={retryFetch} className="bg-black text-white hover:bg-gray-900">
               Try Again
             </Button>
           </Card>
