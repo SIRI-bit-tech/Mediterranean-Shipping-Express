@@ -79,20 +79,67 @@ export function TrackContent() {
     onShipmentStatusUpdate: (update) => {
       // Update shipment status in real-time
       if (shipment) {
-        setShipment(prev => prev ? {
-          ...prev,
-          status: update.status,
-          currentLocation: update.location?.address || prev.currentLocation,
-          coordinates: update.location ? {
-            ...prev.coordinates!,
-            current: {
-              latitude: update.location.latitude,
-              longitude: update.location.longitude,
-              city: prev.coordinates!.current.city,
-              country: prev.coordinates!.current.country
+        setShipment(prev => {
+          if (!prev) return null
+          
+          // Safely handle coordinates update
+          let updatedCoordinates = prev.coordinates
+          
+          if (update.location) {
+            // If we have location data in the update
+            if (prev.coordinates && prev.coordinates.current) {
+              // Update existing coordinates
+              updatedCoordinates = {
+                ...prev.coordinates,
+                current: {
+                  latitude: update.location.latitude,
+                  longitude: update.location.longitude,
+                  city: prev.coordinates.current.city,
+                  country: prev.coordinates.current.country
+                }
+              }
+            } else if (prev.coordinates) {
+              // Coordinates exist but current is missing - create current from update
+              updatedCoordinates = {
+                ...prev.coordinates,
+                current: {
+                  latitude: update.location.latitude,
+                  longitude: update.location.longitude,
+                  city: 'Unknown',
+                  country: 'Unknown'
+                }
+              }
+            } else {
+              // No coordinates exist - create new coordinates object with sensible defaults
+              updatedCoordinates = {
+                origin: {
+                  latitude: 0,
+                  longitude: 0,
+                  address: 'Origin'
+                },
+                destination: {
+                  latitude: 0,
+                  longitude: 0,
+                  address: 'Destination'
+                },
+                current: {
+                  latitude: update.location.latitude,
+                  longitude: update.location.longitude,
+                  city: 'Unknown',
+                  country: 'Unknown'
+                }
+              }
             }
-          } : prev.coordinates
-        } : null)
+          }
+          // If update.location is undefined, preserve existing coordinates
+          
+          return {
+            ...prev,
+            status: update.status,
+            currentLocation: update.location?.address || prev.currentLocation,
+            coordinates: updatedCoordinates
+          }
+        })
       }
     },
     onAdminUpdate: (update) => {

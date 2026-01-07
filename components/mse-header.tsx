@@ -11,10 +11,10 @@ export function MSEHeader() {
   const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
-    // Check for authentication by calling a protected endpoint
+    // Check for authentication by calling a dedicated auth endpoint
     const checkAuth = async () => {
       try {
-        const response = await fetch("/api/shipments", {
+        const response = await fetch("/api/auth/me", {
           credentials: 'include',
           headers: {
             "Content-Type": "application/json"
@@ -24,11 +24,15 @@ export function MSEHeader() {
         if (response.ok) {
           const data = await response.json()
           setIsAuthenticated(true)
-          // We could get user info from the response or make a separate call
-          // For now, just set authenticated state
+          setUser(data.user)
+        } else {
+          // Not authenticated
+          setIsAuthenticated(false)
+          setUser(null)
         }
       } catch (error) {
-        // Not authenticated or error occurred
+        // Error occurred
+        console.error("Auth check error:", error)
         setIsAuthenticated(false)
         setUser(null)
       }

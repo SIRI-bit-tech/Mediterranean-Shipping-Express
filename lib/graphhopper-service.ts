@@ -6,8 +6,8 @@
 
 import { fallbackMapService } from './fallback-map-service'
 
-const GRAPHHOPPER_BASE_URL = process.env.NEXT_PUBLIC_GRAPHHOPPER_BASE_URL || 'https://graphhopper.com/api/1'
-const GRAPHHOPPER_API_KEY = process.env.NEXT_PUBLIC_GRAPHHOPPER_API_KEY
+const GRAPHHOPPER_BASE_URL = process.env.GRAPHHOPPER_BASE_URL || 'https://graphhopper.com/api/1'
+const GRAPHHOPPER_API_KEY = process.env.GRAPHHOPPER_API_KEY
 
 interface Coordinates {
   latitude: number
@@ -47,6 +47,11 @@ class GraphHopperService {
   private lastRequestTime: number = 0
 
   constructor() {
+    // Ensure this service only runs on the server
+    if (typeof window !== 'undefined') {
+      throw new Error('GraphHopperService can only be used on the server side. Use /api/route or /api/geocode endpoints from client code.')
+    }
+
     // Use fallback service if no API key is provided
     if (!GRAPHHOPPER_API_KEY || GRAPHHOPPER_API_KEY === 'your-graphhopper-api-key-here') {
       console.warn('GraphHopper API key not configured, using fallback service')

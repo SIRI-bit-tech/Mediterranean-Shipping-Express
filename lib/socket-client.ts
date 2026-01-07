@@ -93,6 +93,49 @@ class SocketService {
   }
 
   /**
+   * Async connection initialization with promise-based waiting
+   */
+  private async initConnection(): Promise<void> {
+    if (typeof window === 'undefined') return // Server-side guard
+    
+    if (this.socket && this.isConnected) return // Already connected
+
+    if (!this.socket) {
+      this.connect()
+    }
+
+    // Wait for connection to establish
+    return new Promise((resolve) => {
+      if (this.socket && this.isConnected) {
+        resolve()
+        return
+      }
+
+      const onConnect = () => {
+        this.socket?.off('connect', onConnect)
+        this.socket?.off('connect_error', onError)
+        resolve()
+      }
+
+      const onError = () => {
+        this.socket?.off('connect', onConnect)
+        this.socket?.off('connect_error', onError)
+        resolve() // Resolve anyway to not block the caller
+      }
+
+      this.socket?.on('connect', onConnect)
+      this.socket?.on('connect_error', onError)
+
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        this.socket?.off('connect', onConnect)
+        this.socket?.off('connect_error', onError)
+        resolve()
+      }, 5000)
+    })
+  }
+
+  /**
    * Subscribe to driver location updates for a specific shipment
    */
   subscribeToDriverLocation(shipmentId: string, callback: (location: DriverLocation) => void) {
@@ -189,6 +232,11 @@ class SocketService {
    * Subscribe to driver assignment updates
    */
   subscribeToDriverAssignments(callback: (assignment: DriverAssignment) => void) {
+    // Initialize connection if not already done
+    if (!this.socket) {
+      this.connect()
+    }
+
     if (!this.socket) return
 
     this.socket.on('driver-assignment', callback)
@@ -220,8 +268,14 @@ class SocketService {
   /**
    * Subscribe to all driver locations (for admin dashboard)
    */
-  subscribeToAllDrivers(callback: (location: DriverLocation) => void) {
-    if (!this.socket) return
+  async subscribeToAllDrivers(callback: (location: DriverLocation) => void) {
+    // Initialize connection and wait for it to be ready
+    await this.initConnection()
+
+    if (!this.socket) {
+      // Return noop unsubscribe if socket is still absent
+      return () => {}
+    }
 
     this.socket.on('driver-location-broadcast', callback)
 
@@ -235,6 +289,11 @@ class SocketService {
    * Subscribe to all admin activities (for admin dashboard)
    */
   subscribeToAllAdminActivities(callback: (update: AdminUpdate) => void) {
+    // Initialize connection if not already done
+    if (!this.socket) {
+      this.connect()
+    }
+
     if (!this.socket) return
 
     this.socket.on('admin-activity-broadcast', callback)
