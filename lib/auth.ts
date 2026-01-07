@@ -45,13 +45,21 @@ export async function verifyToken(token: string): Promise<AuthUser | null> {
 }
 
 export async function requireAuth(request: NextRequest): Promise<AuthUser | null> {
-  const authHeader = request.headers.get("authorization")
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return null
+  // First try to get token from cookie (new secure method)
+  const tokenFromCookie = request.cookies.get('auth-token')?.value
+  
+  if (tokenFromCookie) {
+    return await verifyToken(tokenFromCookie)
   }
 
-  const token = authHeader.replace("Bearer ", "")
-  return await verifyToken(token)
+  // Fallback to Authorization header for backward compatibility
+  const authHeader = request.headers.get("authorization")
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "")
+    return await verifyToken(token)
+  }
+
+  return null
 }
 
 export async function requireAdminAuth(request: NextRequest): Promise<AuthUser | null> {

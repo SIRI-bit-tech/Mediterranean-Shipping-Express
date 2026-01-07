@@ -7,12 +7,25 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Package, MapPin, Truck, CheckCircle2, Search, ArrowRight } from "lucide-react"
+import { Package, MapPin, Truck, CheckCircle2, Search, ArrowRight, Loader2 } from "lucide-react"
+
+interface GeocodingResult {
+  coordinates: {
+    latitude: number
+    longitude: number
+  }
+  formattedAddress: string
+  confidence: number
+}
 
 export function ShipForm() {
   const [step, setStep] = useState(1)
   const [saveDraft, setSaveDraft] = useState(false)
   const [estimatedCost, setEstimatedCost] = useState("--")
+  const [createdShipment, setCreatedShipment] = useState<any>(null)
+  const [geocodingLoading, setGeocodingLoading] = useState(false)
+  const [originCoords, setOriginCoords] = useState<GeocodingResult | null>(null)
+  const [destinationCoords, setDestinationCoords] = useState<GeocodingResult | null>(null)
   const [formData, setFormData] = useState({
     contactName: "",
     companyName: "",
@@ -41,6 +54,63 @@ export function ShipForm() {
     serviceType: "STANDARD",
   })
 
+  // Geocode address using GraphHopper
+  const geocodeAddress = async (address: string): Promise<GeocodingResult | null> => {
+    try {
+      setGeocodingLoading(true)
+      const response = await fetch('/api/geocode', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ address }),
+      })
+
+      const data = await response.json()
+      
+      if (data.success) {
+        return data.data
+      } else {
+        console.warn('Geocoding failed:', data.error)
+        return null
+      }
+    } catch (error) {
+      console.error('Geocoding error:', error)
+      return null
+    } finally {
+      setGeocodingLoading(false)
+    }
+  }
+
+  // Handle address search and geocoding
+  const handleAddressSearch = async (addressType: 'origin' | 'destination') => {
+    const address = addressType === 'origin' 
+      ? `${formData.streetAddress}, ${formData.city}, ${formData.state}, ${formData.zipCode}`.replace(/^,\s*/, '').replace(/,\s*$/, '')
+      : `${formData.recipientAddress}, ${formData.recipientCity}, ${formData.recipientState}, ${formData.recipientZip}`.replace(/^,\s*/, '').replace(/,\s*$/, '')
+
+    if (!address.trim()) {
+      return
+    }
+
+    const result = await geocodeAddress(address)
+    
+    if (result) {
+      if (addressType === 'origin') {
+        setOriginCoords(result)
+        // Update form with formatted address if needed
+        if (result.confidence > 0.8) {
+          // High confidence - could auto-fill missing fields
+        }
+      } else {
+        setDestinationCoords(result)
+        // Update form with formatted address if needed
+        if (result.confidence > 0.8) {
+          // High confidence - could auto-fill missing fields
+        }
+      }
+    }
+  }
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -55,37 +125,64 @@ export function ShipForm() {
     }
   }
 
+  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({ ...prev, [name]: value }))
+  }
+
   const handleSubmit = async () => {
     try {
       const shipmentData = {
-        senderName: formData.contactName,
-        senderCompany: formData.companyName,
-        senderPhone: formData.phoneNumber,
-        senderEmail: formData.email,
-        senderAddress: `${formData.streetAddress}, ${formData.apt}, ${formData.city}, ${formData.state} ${formData.zipCode}`,
-        recipientName: formData.recipientName,
-        recipientEmail: formData.recipientEmail,
-        recipientPhone: formData.recipientPhone,
-        recipientAddress: `${formData.recipientAddress}, ${formData.recipientApt}, ${formData.recipientCity}, ${formData.recipientState} ${formData.recipientZip}`,
+        originAddress: {
+          street: formData.streetAddress,
+          apt: formData.apt,
+          city: formData.city,
+          state: formData.state,
+          zipCode: formData.zipCode,
+          contactName: formData.contactName,
+          companyName: formData.companyName,
+          phone: formData.phoneNumber,
+          email: formData.email
+        },
+        destinationAddress: {
+          street: formData.recipientAddress,
+          apt: formData.recipientApt,
+          city: formData.recipientCity,
+          state: formData.recipientState,
+          zipCode: formData.recipientZip,
+          contactName: formData.recipientName,
+          companyName: formData.recipientCompany,
+          phone: formData.recipientPhone,
+          email: formData.recipientEmail
+        },
         weight: Number.parseFloat(formData.packageWeight),
         dimensions: `${formData.packageLength}x${formData.packageWidth}x${formData.packageHeight}`,
         description: formData.packageDescription,
-        serviceType: formData.serviceType,
-        estimatedCost: Number.parseFloat(estimatedCost),
+        transportMode: formData.serviceType === 'PRIORITY' ? 'AIR' : 'LAND',
+        packageValue: Number.parseFloat(estimatedCost),
+        isInternational: false
       }
 
       const response = await fetch("/api/shipments", {
         method: "POST",
+        credentials: 'include', // Include cookies for authentication
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(shipmentData),
       })
 
       if (response.ok) {
         const data = await response.json()
+        console.log('Shipment created:', data)
+        setCreatedShipment(data.shipment)
         setStep(4)
+      } else {
+        const errorData = await response.json()
+        console.error('Shipment creation failed:', errorData)
+        // Handle error - maybe show error message to user
       }
     } catch (error) {
-      console.error("[v0] Shipment creation failed:", error)
+      console.error("Shipment creation failed:", error)
+      // Handle error - maybe show error message to user
     }
   }
 
@@ -167,7 +264,7 @@ export function ShipForm() {
                     <Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                     <Input
                       name="searchAddress"
-                      placeholder="Start typing to search via Mapbox..."
+                      placeholder="Start typing to search address..."
                       value={formData.searchAddress}
                       onChange={handleInputChange}
                       className="pl-10 bg-gray-50 border-gray-200"
@@ -415,7 +512,7 @@ export function ShipForm() {
                 <select
                   name="serviceType"
                   value={formData.serviceType}
-                  onChange={handleInputChange}
+                  onChange={handleSelectChange}
                   className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-yellow-500 bg-gray-50 text-black"
                 >
                   <option value="STANDARD">Standard (5-7 days)</option>
@@ -445,14 +542,14 @@ export function ShipForm() {
             <h2 className="text-4xl font-bold text-black mb-4">Shipment Created!</h2>
             <p className="text-gray-600 mb-8 text-lg">Your shipment has been successfully registered.</p>
             <div className="bg-gray-100 rounded-lg p-8 mb-8 font-mono text-2xl font-bold text-black tracking-wider">
-              1Z999AA10123456784
+              {createdShipment?.trackingNumber || 'MSE-LOADING...'}
             </div>
             <p className="text-gray-600 mb-8">
               Check your email for confirmation. You can track your package anytime using the tracking number above.
             </p>
             <div className="flex gap-4 flex-col sm:flex-row justify-center">
               <Button
-                onClick={() => (window.location.href = "/track?id=1Z999AA10123456784")}
+                onClick={() => (window.location.href = `/track?id=${createdShipment?.trackingNumber || ''}`)}
                 className="bg-black text-white hover:bg-gray-900 px-8 py-3"
               >
                 Track Now
@@ -478,15 +575,12 @@ export function ShipForm() {
           </h3>
 
           <div className="h-60 bg-gray-200 rounded-lg mb-6 flex items-center justify-center overflow-hidden">
-            <div
-              className="w-full h-full"
-              style={{
-                backgroundImage:
-                  "url('https://api.mapbox.com/styles/v1/mapbox/light-v11/static/0,20,2/400x300@2x?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycW43dnRjMWZuNWEifQ.rJcFIG214AriISLbB6B5aw')",
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }}
-            ></div>
+            <div className="w-full h-full bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center">
+              <div className="text-center">
+                <MapPin className="h-8 w-8 text-blue-500 mx-auto mb-2" />
+                <p className="text-sm text-gray-600">Route will appear here</p>
+              </div>
+            </div>
           </div>
 
           <div className="mb-4">

@@ -4,24 +4,49 @@ import { MSEHeader } from "@/components/mse-header"
 import { MSEFooter } from "@/components/mse-footer"
 import { Card } from "@/components/ui/card"
 import { RealTimeTrackingCard } from "@/components/real-time-tracking-card"
-import { MapboxMap } from "@/components/mapbox-map"
+import { MapLibreMap } from "@/components/maplibre-map"
 import { CheckCircle2 } from "lucide-react"
 import { useState, useEffect } from "react"
-import type { Shipment } from "@/lib/types/global"
+
+// Define the shipment interface locally since it's not exported from global types
+interface Shipment {
+  id: string
+  trackingNumber: string
+  status: string
+  weight: number
+  transportMode: string
+  estimatedDeliveryDate: string
+  isInternational: boolean
+  currentLatitude?: number
+  currentLongitude?: number
+  currentCity?: string
+  currentCountry?: string
+}
 
 interface TrackingPageProps {
   params: Promise<{ trackingNumber: string }>
 }
 
-export default async function TrackingDetailPage({ params }: TrackingPageProps) {
-  const { trackingNumber } = await params
+export default function TrackingDetailPage({ params }: TrackingPageProps) {
+  const [trackingNumber, setTrackingNumber] = useState<string>("")
   const [shipment, setShipment] = useState<Shipment | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Resolve params and set tracking number
   useEffect(() => {
+    const resolveParams = async () => {
+      const resolvedParams = await params
+      setTrackingNumber(resolvedParams.trackingNumber)
+    }
+    resolveParams()
+  }, [params])
+
+  useEffect(() => {
+    if (!trackingNumber) return
+
     const fetchShipment = async () => {
       try {
-        const response = await fetch(`/api/track/${params.trackingNumber}`)
+        const response = await fetch(`/api/track/${trackingNumber}`)
         if (response.ok) {
           const data = await response.json()
           setShipment(data.data)
@@ -34,7 +59,7 @@ export default async function TrackingDetailPage({ params }: TrackingPageProps) 
     }
 
     fetchShipment()
-  }, [params.trackingNumber])
+  }, [trackingNumber])
 
   if (loading) {
     return (
@@ -74,14 +99,14 @@ export default async function TrackingDetailPage({ params }: TrackingPageProps) 
           {/* Map */}
           <div className="lg:col-span-2">
             <Card className="p-4 overflow-hidden">
-              <MapboxMap
-                accessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ""}
+              <MapLibreMap
                 shipmentLocation={{
-                  latitude: shipment.currentLatitude || 51.5074,
-                  longitude: shipment.currentLongitude || -0.1278,
+                  latitude: shipment.currentLatitude || 35.0,
+                  longitude: shipment.currentLongitude || 18.0,
                   city: shipment.currentCity || "In Transit",
                   country: shipment.currentCountry || "",
                 }}
+                className="w-full h-96"
               />
             </Card>
           </div>

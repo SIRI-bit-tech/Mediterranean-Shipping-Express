@@ -1,11 +1,16 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef, useSearchParams } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Package, Truck, CheckCircle2, Search } from "lucide-react"
+import { MapLibreMap } from "@/components/maplibre-map"
+import type { RouteResult } from "@/lib/graphhopper-service"
+import { useRealTimeTracking } from "@/lib/hooks/use-real-time-tracking"
+import type { DriverLocation, AdminUpdate } from "@/lib/socket-client"
 
 interface TrackingData {
   trackingNumber: string
@@ -19,6 +24,31 @@ interface TrackingData {
   dimensions: string
   service: string
   lastUpdate: string
+  origin?: string
+  destination?: string
+  coordinates?: {
+    origin: {
+      latitude: number
+      longitude: number
+      address: string
+    }
+    destination: {
+      latitude: number
+      longitude: number
+      address: string
+    }
+    current: {
+      latitude: number
+      longitude: number
+      city: string
+      country: string
+    }
+  }
+  route?: {
+    distance: number
+    duration: number
+    eta: string
+  }
 }
 
 interface TimelineEvent {
@@ -33,9 +63,51 @@ export function TrackContent() {
   const searchParams = useSearchParams()
   const [trackingNumber, setTrackingNumber] = useState(searchParams?.get("id") || "")
   const [shipment, setShipment] = useState<TrackingData | null>(null)
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const mapRef = useRef<HTMLDivElement>(null)
+  const [routeInfo, setRouteInfo] = useState<RouteResult | null>(null)
+  const [driverLocation, setDriverLocation] = useState<DriverLocation | null>(null)
+  const [adminUpdates, setAdminUpdates] = useState<AdminUpdate[]>([])
+
+  // Real-time tracking integration
+  const { isConnected } = useRealTimeTracking({
+    shipmentId: shipment?.trackingNumber || '',
+    onDriverLocationUpdate: (location) => {
+      setDriverLocation(location)
+    },
+    onShipmentStatusUpdate: (update) => {
+      // Update shipment status in real-time
+      if (shipment) {
+        setShipment(prev => prev ? {
+          ...prev,
+          status: update.status,
+          currentLocation: update.location?.address || prev.currentLocation,
+          coordinates: update.location ? {
+            ...prev.coordinates!,
+            current: {
+              latitude: update.location.latitude,
+              longitude: update.location.longitude,
+              city: prev.coordinates!.current.city,
+              country: prev.coordinates!.current.country
+            }
+          } : prev.coordinates
+        } : null)
+      }
+    },
+    onAdminUpdate: (update) => {
+      // Handle admin updates
+      setAdminUpdates(prev => [update, ...prev.slice(0, 9)]) // Keep last 10 updates
+      
+      // Update shipment based on admin action
+      if (update.type === 'status_change' && shipment) {
+        setShipment(prev => prev ? {
+          ...prev,
+          status: update.data.status
+        } : null)
+      }
+    }
+  })
 
   const handleTrack = async (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -45,31 +117,75 @@ export function TrackContent() {
     setError("")
 
     try {
-      const response = await fetch(`/api/track/${trackingNumber}`)
-      if (!response.ok) {
+      // Fetch shipment data
+      const shipmentResponse = await fetch(`/api/track/${trackingNumber}`)
+      if (!shipmentResponse.ok) {
         setError("Shipment not found. Please check your tracking number.")
         return
       }
-      const data = await response.json()
-      setShipment(data.data)
+      const shipmentData = await shipmentResponse.json()
+      setShipment(shipmentData.data)
 
-      if (mapRef.current && window.mapboxgl) {
-        initializeMap()
+      // Fetch timeline data
+      const timelineResponse = await fetch(`/api/track/${trackingNumber}/timeline`)
+      if (timelineResponse.ok) {
+        const timelineData = await timelineResponse.json()
+        if (timelineData.success && timelineData.data.length > 0) {
+          // Convert API timeline data to component format
+          const formattedTimeline = timelineData.data.map((item: any) => ({
+            title: item.event,
+            location: item.location,
+            time: new Date(item.timestamp).toLocaleString(),
+            completed: true,
+            icon: getIconForStatus(item.status)
+          }))
+          setTimeline(formattedTimeline)
+        } else {
+          // Fallback to basic timeline if no checkpoints exist
+          setTimeline([
+            {
+              title: `Shipment ${shipmentData.data.status.replace('_', ' ')}`,
+              location: shipmentData.data.currentLocation || 'Processing',
+              time: new Date(shipmentData.data.lastUpdate).toLocaleString(),
+              completed: true,
+              icon: "box",
+            }
+          ])
+        }
       }
     } catch (err) {
-      console.error("[v0] Tracking error:", err)
+      console.error("Tracking error:", err)
       setError("Unable to retrieve tracking information.")
     } finally {
       setLoading(false)
     }
   }
 
-  const initializeMap = () => {
-    if (!mapRef.current || !shipment) return
+  const getIconForStatus = (status: string): "check" | "truck" | "box" => {
+    if (status === 'completed' || status === 'delivered') return 'check'
+    if (status === 'in-transit' || status === 'out-for-delivery') return 'truck'
+    return 'box'
+  }
 
-    mapRef.current.style.backgroundImage = `url('https://api.mapbox.com/styles/v1/mapbox/light-v11/static/-74.0,40.7,2/800x400@2x?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycW43dnRjMWZuNWEifQ.rJcFIG214AriISLbB6B5aw')`
-    mapRef.current.style.backgroundSize = "cover"
-    mapRef.current.style.backgroundPosition = "center"
+  const handleRouteCalculated = (route: RouteResult) => {
+    setRouteInfo(route)
+  }
+
+  const formatDistance = (meters: number): string => {
+    if (meters < 1000) {
+      return `${Math.round(meters)} m`
+    }
+    return `${(meters / 1000).toFixed(1)} km`
+  }
+
+  const formatDuration = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`
+    }
+    return `${minutes}m`
   }
 
   useEffect(() => {
@@ -77,39 +193,6 @@ export function TrackContent() {
       handleTrack()
     }
   }, [])
-
-  const timelineEvents: TimelineEvent[] = shipment
-    ? [
-        {
-          title: "Arrived at Sort Facility",
-          location: "New York, NY",
-          time: "Today, 08:30 AM",
-          completed: true,
-          icon: "check",
-        },
-        {
-          title: "Departed Logistics Hub",
-          location: "Milan, IT",
-          time: "Yesterday, 10:00 PM",
-          completed: true,
-          icon: "truck",
-        },
-        {
-          title: "Processed at Origin",
-          location: "Milan, IT",
-          time: "Yesterday, 06:00 PM",
-          completed: true,
-          icon: "box",
-        },
-        {
-          title: "Shipment Initiated",
-          location: "Milan, IT",
-          time: "Yesterday, 04:00 PM",
-          completed: true,
-          icon: "box",
-        },
-      ]
-    : []
 
   return (
     <>
@@ -173,28 +256,47 @@ export function TrackContent() {
               <div className="lg:col-span-2 space-y-8">
                 {/* Live Location Map */}
                 <Card className="p-6 bg-white">
-                  <p className="text-gray-600 text-sm font-semibold mb-4">LIVE LOCATION</p>
-                  <div
-                    ref={mapRef}
-                    className="h-96 bg-gray-300 rounded-lg overflow-hidden relative flex items-center justify-center"
-                  >
-                    <svg className="absolute inset-0 w-full h-full" style={{ pointerEvents: "none" }}>
-                      <line x1="20%" y1="20%" x2="50%" y2="50%" stroke="#FFB700" strokeWidth="3" />
-                      <line x1="50%" y1="50%" x2="80%" y2="30%" stroke="#FFB700" strokeWidth="3" />
-
-                      <circle cx="20%" cy="20%" r="8" fill="white" stroke="#FFB700" strokeWidth="2" />
-
-                      <circle cx="50%" cy="50%" r="10" fill="#FFB700" stroke="white" strokeWidth="3" />
-                      <rect x="45%" y="58%" width="10%" height="20" fill="#000" rx="3" />
-                      <text x="50%" y="72%" fontSize="12" fill="white" textAnchor="middle" fontWeight="bold">
-                        In Transit
-                      </text>
-
-                      <circle cx="80%" cy="30%" r="8" fill="white" stroke="#666" strokeWidth="2" />
-                    </svg>
-
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-gray-600 text-sm font-semibold">LIVE LOCATION</p>
+                    <div className="flex items-center gap-4">
+                      {/* Connection status indicator - only show when connected */}
+                      {isConnected && (
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-green-500" />
+                          <span className="text-xs text-gray-500">Live</span>
+                        </div>
+                      )}
+                      {routeInfo && (
+                        <div className="text-right text-xs text-gray-500">
+                          <div>Distance: {formatDistance(routeInfo.distance)}</div>
+                          <div>Duration: {formatDuration(routeInfo.duration)}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="h-96 rounded-lg overflow-hidden relative">
+                    {shipment?.coordinates ? (
+                      <MapLibreMap
+                        shipmentLocation={shipment.coordinates.current}
+                        originLocation={shipment.coordinates.origin}
+                        destinationLocation={shipment.coordinates.destination}
+                        driverLocation={driverLocation ? {
+                          latitude: driverLocation.latitude,
+                          longitude: driverLocation.longitude
+                        } : undefined}
+                        showRoute={true}
+                        onRouteCalculated={handleRouteCalculated}
+                        className="w-full h-full rounded-lg"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gray-300 rounded-lg flex items-center justify-center">
+                        <div className="text-gray-500">Loading map...</div>
+                      </div>
+                    )}
                     <div className="absolute bottom-4 right-4 bg-black/70 backdrop-blur text-white px-4 py-2 rounded-lg text-sm font-semibold">
-                      UPDATED: 2 MINS AGO
+                      {driverLocation && (
+                        `DRIVER UPDATED: ${new Date(driverLocation.timestamp).toLocaleTimeString()}`
+                      )}
                     </div>
                   </div>
                 </Card>
@@ -204,7 +306,7 @@ export function TrackContent() {
                   <h3 className="text-xl font-bold text-black mb-8">Shipment Journey</h3>
 
                   <div className="space-y-6">
-                    {timelineEvents.map((event, idx) => (
+                    {timeline.map((event, idx) => (
                       <div key={idx} className="flex gap-4">
                         <div className="flex flex-col items-center">
                           <div
@@ -216,7 +318,7 @@ export function TrackContent() {
                             {event.icon === "truck" && <Truck className="h-6 w-6 text-white" />}
                             {event.icon === "box" && <Package className="h-6 w-6 text-white" />}
                           </div>
-                          {idx < timelineEvents.length - 1 && (
+                          {idx < timeline.length - 1 && (
                             <div
                               className={`w-0.5 h-12 ${event.completed ? "bg-yellow-500" : "bg-gray-200"} my-2`}
                             ></div>
@@ -238,14 +340,14 @@ export function TrackContent() {
               <div className="space-y-6">
                 <Card className="p-6 bg-white">
                   <p className="text-gray-600 text-xs font-bold uppercase tracking-wide mb-3">FROM</p>
-                  <p className="font-bold text-black text-lg mb-1">MSE Logistics Hub</p>
-                  <p className="text-gray-600 text-sm">Milan, Italy</p>
+                  <p className="font-bold text-black text-lg mb-1">Origin Address</p>
+                  <p className="text-gray-600 text-sm">{shipment.origin || shipment.originCity || 'Origin Location'}</p>
                 </Card>
 
                 <Card className="p-6 bg-white">
                   <p className="text-gray-600 text-xs font-bold uppercase tracking-wide mb-3">TO</p>
-                  <p className="font-bold text-black text-lg mb-1">John Doe</p>
-                  <p className="text-gray-600 text-sm">123 Fashion Ave, NY 10018</p>
+                  <p className="font-bold text-black text-lg mb-1">Destination Address</p>
+                  <p className="text-gray-600 text-sm">{shipment.destination || shipment.destinationCity || 'Destination Location'}</p>
                 </Card>
 
                 <Card className="p-6 bg-white">
@@ -259,6 +361,28 @@ export function TrackContent() {
                   <p className="font-bold text-black text-base">{shipment.service}</p>
                   <p className="text-gray-600 text-sm">Signature Required</p>
                 </Card>
+
+                {/* Admin Updates */}
+                {adminUpdates.length > 0 && (
+                  <Card className="p-6 bg-white">
+                    <p className="text-gray-600 text-xs font-bold uppercase tracking-wide mb-3">RECENT UPDATES</p>
+                    <div className="space-y-3">
+                      {adminUpdates.slice(0, 3).map((update, idx) => (
+                        <div key={idx} className="border-l-2 border-yellow-500 pl-3">
+                          <p className="font-semibold text-black text-sm">
+                            {update.type.replace('_', ' ').toUpperCase()}
+                          </p>
+                          <p className="text-gray-600 text-xs">
+                            by {update.adminName}
+                          </p>
+                          <p className="text-gray-500 text-xs">
+                            {new Date(update.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
               </div>
             </div>
           </div>
