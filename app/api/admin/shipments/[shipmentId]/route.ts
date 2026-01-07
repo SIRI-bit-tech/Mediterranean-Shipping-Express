@@ -44,15 +44,125 @@ export async function PUT(
       'customsStatus': 'customs_status'
     }
 
-    // Process each field in the request body
+    // Define validation constraints
+    const allowedStatuses = ['PROCESSING', 'IN_TRANSIT', 'IN_CUSTOMS', 'OUT_FOR_DELIVERY', 'DELIVERED', 'ON_HOLD', 'EXCEPTION']
+    const allowedTransportModes = ['AIR', 'LAND', 'WATER', 'MULTIMODAL']
+
+    // Validation helper functions
+    const validateStatus = (status: any): boolean => {
+      return typeof status === 'string' && allowedStatuses.includes(status)
+    }
+
+    const validateTransportMode = (mode: any): boolean => {
+      return typeof mode === 'string' && allowedTransportModes.includes(mode)
+    }
+
+    const validateDate = (dateValue: any): boolean => {
+      if (!dateValue) return false
+      const date = new Date(dateValue)
+      return !isNaN(date.getTime()) && date > new Date()
+    }
+
+    const validateWeight = (weight: any): boolean => {
+      const num = parseFloat(weight)
+      return !isNaN(num) && num > 0 && num <= 10000 // 0-10000 kg range
+    }
+
+    const validatePackageValue = (value: any): boolean => {
+      const num = parseFloat(value)
+      return !isNaN(num) && num >= 0 && num <= 1000000 // 0-1M USD range
+    }
+
+    const validateLatitude = (lat: any): boolean => {
+      const num = parseFloat(lat)
+      return !isNaN(num) && num >= -90 && num <= 90
+    }
+
+    const validateLongitude = (lng: any): boolean => {
+      const num = parseFloat(lng)
+      return !isNaN(num) && num >= -180 && num <= 180
+    }
+
+    // Process each field in the request body with validation
+    const validationErrors: string[] = []
+
     Object.keys(body).forEach(key => {
       const dbField = fieldMapping[key] || key
-      if (allowedFields.includes(dbField) && body[key] !== undefined) {
+      const value = body[key]
+      
+      if (!allowedFields.includes(dbField) || value === undefined) {
+        return // Skip non-allowed or undefined fields
+      }
+
+      // Validate based on field type
+      let isValid = true
+      let validatedValue = value
+
+      switch (dbField) {
+        case 'status':
+          isValid = validateStatus(value)
+          if (!isValid) validationErrors.push(`Invalid status: ${value}`)
+          break
+
+        case 'transport_mode':
+          isValid = validateTransportMode(value)
+          if (!isValid) validationErrors.push(`Invalid transport mode: ${value}`)
+          break
+
+        case 'estimated_delivery_date':
+          isValid = validateDate(value)
+          if (!isValid) validationErrors.push(`Invalid or past delivery date: ${value}`)
+          validatedValue = new Date(value).toISOString()
+          break
+
+        case 'weight':
+          isValid = validateWeight(value)
+          if (!isValid) validationErrors.push(`Invalid weight: ${value} (must be 0-10000 kg)`)
+          validatedValue = parseFloat(value)
+          break
+
+        case 'package_value':
+          isValid = validatePackageValue(value)
+          if (!isValid) validationErrors.push(`Invalid package value: ${value} (must be 0-1000000)`)
+          validatedValue = parseFloat(value)
+          break
+
+        case 'current_latitude':
+          isValid = validateLatitude(value)
+          if (!isValid) validationErrors.push(`Invalid latitude: ${value} (must be -90 to 90)`)
+          validatedValue = parseFloat(value)
+          break
+
+        case 'current_longitude':
+          isValid = validateLongitude(value)
+          if (!isValid) validationErrors.push(`Invalid longitude: ${value} (must be -180 to 180)`)
+          validatedValue = parseFloat(value)
+          break
+
+        default:
+          // For string fields, ensure they're not empty if provided
+          if (typeof value === 'string' && value.trim() === '') {
+            return // Skip empty strings
+          }
+          validatedValue = typeof value === 'string' ? value.trim() : value
+          break
+      }
+
+      // Only add valid fields to update
+      if (isValid) {
         updateFields.push(`${dbField} = $${paramIndex}`)
-        values.push(body[key])
+        values.push(validatedValue)
         paramIndex++
       }
     })
+
+    // Return validation errors if any
+    if (validationErrors.length > 0) {
+      return NextResponse.json({ 
+        error: "Validation failed", 
+        details: validationErrors 
+      }, { status: 400 })
+    }
 
     if (updateFields.length === 0) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 })
@@ -78,6 +188,41 @@ export async function PUT(
     }
 
     const updatedShipment = result.rows[0]
+
+    // Create tracking checkpoint for the update (similar to status route)
+    try {
+      await query(
+        `INSERT INTO tracking_checkpoints (shipment_id, status, location, timestamp, notes, created_at)
+         VALUES ($1, $2, $3, NOW(), $4, NOW())`,
+        [
+          updatedShipment.id,
+          updatedShipment.status,
+          updatedShipment.current_location || 'Admin Update',
+          `Shipment updated by admin: ${admin.name || admin.email}`
+        ]
+      )
+    } catch (trackingError) {
+      console.error('Error creating tracking checkpoint:', trackingError)
+      // Don't block the response, just log the error
+    }
+
+    // Create notification for customer (similar to status route)
+    try {
+      await query(
+        `INSERT INTO notifications (user_id, shipment_id, title, message, type, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [
+          updatedShipment.user_id,
+          updatedShipment.id,
+          'Shipment Updated',
+          `Your package ${updatedShipment.tracking_number} has been updated. Check tracking for latest details.`,
+          'STATUS_UPDATE'
+        ]
+      )
+    } catch (notificationError) {
+      console.error('Error creating notification:', notificationError)
+      // Don't block the response, just log the error
+    }
 
     return NextResponse.json({
       success: true,

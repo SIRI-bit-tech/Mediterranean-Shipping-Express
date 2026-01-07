@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { query } from "@/lib/db"
+import { query, pool } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
 import { transformShipmentRows, ShipmentRow } from "@/lib/shipment-utils"
 
@@ -72,79 +72,116 @@ export async function POST(request: NextRequest) {
     const originAddressString = `${originAddress.street || ''}, ${originAddress.apt || ''}, ${originAddress.city || ''}, ${originAddress.state || ''} ${originAddress.zipCode || ''}`.trim()
     const destinationAddressString = `${destinationAddress.street || ''}, ${destinationAddress.apt || ''}, ${destinationAddress.city || ''}, ${destinationAddress.state || ''} ${destinationAddress.zipCode || ''}`.trim()
 
-    // Create temporary address records for origin and destination
-    // This is a simplified approach - in a full implementation, you'd have proper address management
-    const originAddressResult = await query(
-      `INSERT INTO addresses (user_id, street, city, state, country, postal_code, is_default, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, false, NOW(), NOW())
-       RETURNING id`,
-      [
-        user.id,
-        `${originAddress.street || ''} ${originAddress.apt || ''}`.trim(),
-        originAddress.city || '',
-        originAddress.state || '',
-        'US', // Default country
-        originAddress.zipCode || ''
-      ]
-    )
+    // Proper address management - check for existing addresses or create new ones
+    const client = await pool.connect()
+    let originAddressId: string
+    let destinationAddressId: string
+    
+    try {
+      // Begin transaction
+      await client.query('BEGIN')
 
-    const destinationAddressResult = await query(
-      `INSERT INTO addresses (user_id, street, city, state, country, postal_code, is_default, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, false, NOW(), NOW())
-       RETURNING id`,
-      [
-        user.id,
-        `${destinationAddress.street || ''} ${destinationAddress.apt || ''}`.trim(),
-        destinationAddress.city || '',
-        destinationAddress.state || '',
-        'US', // Default country
-        destinationAddress.zipCode || ''
-      ]
-    )
+      // Helper function to find or create address
+      const findOrCreateAddress = async (addressData: any, userId: string) => {
+        const street = `${addressData.street || ''} ${addressData.apt || ''}`.trim()
+        const city = addressData.city || ''
+        const state = addressData.state || ''
+        const country = 'US' // Default country
+        const postalCode = addressData.zipCode || ''
 
-    const originAddressId = originAddressResult.rows[0].id
-    const destinationAddressId = destinationAddressResult.rows[0].id
+        // First, try to find existing address for this user
+        const existingAddress = await client.query(
+          `SELECT id FROM addresses 
+           WHERE user_id = $1 AND street = $2 AND city = $3 AND state = $4 AND country = $5 AND postal_code = $6
+           LIMIT 1`,
+          [userId, street, city, state, country, postalCode]
+        )
 
-    // Insert new shipment with proper address IDs
-    const result = await query(
-      `INSERT INTO shipments (
-        tracking_number, user_id, origin_address_id, destination_address_id,
-        status, transport_mode, weight, dimensions, 
-        description, package_value, special_handling, is_international, 
-        estimated_delivery_date, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
-      RETURNING id, tracking_number, status, created_at`,
-      [
-        trackingNumber,
-        user.id,
-        originAddressId,
-        destinationAddressId,
-        'PROCESSING',
-        transportMode || 'LAND',
-        weight,
-        dimensions || null,
-        description,
-        packageValue || null,
-        specialHandling || null,
-        isInternational || false,
-        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days from now
-      ]
-    )
+        if (existingAddress.rows.length > 0) {
+          // Address already exists, return its ID
+          return existingAddress.rows[0].id
+        }
 
-    const newShipment = result.rows[0]
+        // Address doesn't exist, create new one
+        const newAddress = await client.query(
+          `INSERT INTO addresses (user_id, street, city, state, country, postal_code, latitude, longitude, is_default, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+           RETURNING id`,
+          [
+            userId,
+            street,
+            city,
+            state,
+            country,
+            postalCode,
+            null, // latitude - to be populated later via geocoding
+            null, // longitude - to be populated later via geocoding
+            false // not default unless explicitly set
+          ]
+        )
 
-    return NextResponse.json({
-      success: true,
-      shipment: {
-        id: newShipment.id,
-        trackingNumber: newShipment.tracking_number,
-        status: newShipment.status,
-        createdAt: newShipment.created_at,
-        originAddress: originAddressString,
-        destinationAddress: destinationAddressString
-      },
-      message: "Shipment created successfully"
-    }, { status: 201 })
+        return newAddress.rows[0].id
+      }
+
+      // Find or create origin address
+      originAddressId = await findOrCreateAddress(originAddress, user.id)
+
+      // Find or create destination address
+      destinationAddressId = await findOrCreateAddress(destinationAddress, user.id)
+
+      // Insert new shipment with proper address IDs
+      const result = await client.query(
+        `INSERT INTO shipments (
+          tracking_number, user_id, origin_address_id, destination_address_id,
+          status, transport_mode, weight, dimensions, 
+          description, package_value, special_handling, is_international, 
+          estimated_delivery_date, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+        RETURNING id, tracking_number, status, created_at`,
+        [
+          trackingNumber,
+          user.id,
+          originAddressId,
+          destinationAddressId,
+          'PROCESSING',
+          transportMode || 'LAND',
+          weight,
+          dimensions || null,
+          description,
+          packageValue || null,
+          specialHandling || null,
+          isInternational || false,
+          new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days from now
+        ]
+      )
+
+      // Commit transaction
+      await client.query('COMMIT')
+      
+      const newShipment = result.rows[0]
+
+      return NextResponse.json({
+        success: true,
+        shipment: {
+          id: newShipment.id,
+          trackingNumber: newShipment.tracking_number,
+          status: newShipment.status,
+          createdAt: newShipment.created_at,
+          originAddress: originAddressString,
+          destinationAddress: destinationAddressString
+        },
+        message: "Shipment created successfully"
+      }, { status: 201 })
+
+    } catch (transactionError) {
+      // Rollback transaction on any error
+      await client.query('ROLLBACK')
+      console.error('Transaction error during shipment creation:', transactionError)
+      throw transactionError
+    } finally {
+      // Always release the client back to the pool
+      client.release()
+    }
 
   } catch (error) {
     console.error('Error creating shipment:', error)

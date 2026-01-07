@@ -26,6 +26,8 @@ export function ShipForm() {
   const [geocodingLoading, setGeocodingLoading] = useState(false)
   const [originCoords, setOriginCoords] = useState<GeocodingResult | null>(null)
   const [destinationCoords, setDestinationCoords] = useState<GeocodingResult | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
   const [formData, setFormData] = useState({
     contactName: "",
     companyName: "",
@@ -131,6 +133,9 @@ export function ShipForm() {
   }
 
   const handleSubmit = async () => {
+    setIsSubmitting(true)
+    setErrorMessage("") // Clear any previous errors
+    
     try {
       const shipmentData = {
         originAddress: {
@@ -178,11 +183,13 @@ export function ShipForm() {
       } else {
         const errorData = await response.json()
         console.error('Shipment creation failed:', errorData)
-        // Handle error - maybe show error message to user
+        setErrorMessage(errorData.error || errorData.message || "Failed to create shipment. Please try again.")
+        setIsSubmitting(false)
       }
     } catch (error) {
       console.error("Shipment creation failed:", error)
-      // Handle error - maybe show error message to user
+      setErrorMessage(error instanceof Error ? error.message : "Network error. Please check your connection and try again.")
+      setIsSubmitting(false)
     }
   }
 
@@ -450,6 +457,16 @@ export function ShipForm() {
             </h2>
 
             <div className="space-y-6">
+              {errorMessage && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 bg-red-500 rounded-full flex-shrink-0"></div>
+                    <p className="text-red-800 text-sm font-medium">Error creating shipment</p>
+                  </div>
+                  <p className="text-red-700 text-sm mt-1 ml-6">{errorMessage}</p>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-black font-semibold mb-2 block text-sm">Weight (kg)</Label>
@@ -522,14 +539,24 @@ export function ShipForm() {
               </div>
 
               <div className="flex gap-4">
-                <Button onClick={() => setStep(2)} variant="outline" className="flex-1 border-gray-300 bg-white">
+                <Button onClick={() => setStep(2)} variant="outline" className="flex-1 border-gray-300 bg-white" disabled={isSubmitting}>
                   Back
                 </Button>
                 <Button
                   onClick={handleSubmit}
-                  className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
+                  disabled={isSubmitting}
+                  className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-black font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Create Shipment <ArrowRight className="h-4 w-4" />
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      Create Shipment <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
                 </Button>
               </div>
             </div>

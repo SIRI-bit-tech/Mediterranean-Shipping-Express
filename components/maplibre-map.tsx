@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
-import { graphHopperService, type Coordinates, type RouteResult } from "@/lib/graphhopper-service"
+import type { Coordinates, RouteResult } from "@/lib/graphhopper-service"
 
 interface MapLibreMapProps {
   shipmentLocation?: {
@@ -260,16 +260,32 @@ export function MapLibreMap({
 
     const calculateRoute = async () => {
       try {
-        const route = await graphHopperService.getRoute(
-          { latitude: originLocation.latitude, longitude: originLocation.longitude },
-          { latitude: destinationLocation.latitude, longitude: destinationLocation.longitude },
-          'car'
-        )
+        const response = await fetch('/api/route', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            start: { latitude: originLocation.latitude, longitude: originLocation.longitude },
+            end: { latitude: destinationLocation.latitude, longitude: destinationLocation.longitude },
+            profile: 'car'
+          }),
+        })
 
-        if (!route) {
-          console.warn('Could not calculate route')
+        if (!response.ok) {
+          console.warn('Could not calculate route:', response.statusText)
           return
         }
+
+        const data = await response.json()
+        
+        if (!data.success || !data.data) {
+          console.warn('Could not calculate route:', data.error)
+          return
+        }
+
+        const route = data.data
 
         // Remove existing route layer and source
         if (map.current!.getLayer(routeLayerId)) {
@@ -315,8 +331,8 @@ export function MapLibreMap({
 
         // Fit map to route bounds
         const bounds = new maplibregl.LngLatBounds()
-        route.coordinates.forEach(coord => {
-          bounds.extend(coord as [number, number])
+        route.coordinates.forEach((coord: [number, number]) => {
+          bounds.extend(coord)
         })
         map.current!.fitBounds(bounds, { padding: 50 })
 

@@ -1,9 +1,18 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { handleAPIError, ValidationError } from "@/lib/api-errors"
 import { graphHopperService } from "@/lib/graphhopper-service"
+import { requireAuth } from "@/lib/auth"
 
 export async function POST(request: NextRequest) {
   try {
+    // Require authentication before processing geocoding request
+    const user = await requireAuth(request)
+    if (!user) {
+      return NextResponse.json({ 
+        error: "Unauthorized - Authentication required" 
+      }, { status: 401 })
+    }
+
     const body = await request.json()
     const { address } = body
 
@@ -41,6 +50,14 @@ export async function POST(request: NextRequest) {
 // Batch geocoding endpoint
 export async function PUT(request: NextRequest) {
   try {
+    // Require authentication before processing batch geocoding request
+    const user = await requireAuth(request)
+    if (!user) {
+      return NextResponse.json({ 
+        error: "Unauthorized - Authentication required" 
+      }, { status: 401 })
+    }
+
     const body = await request.json()
     const { addresses } = body
 

@@ -9,7 +9,7 @@
     "dev": "node server.js",
     "dev:next": "next dev",
     "lint": "eslint .",
-    "start": "NODE_ENV=production node server.js",
+    "start": "cross-env NODE_ENV=production node server.js",
     "start:next": "next start",
     "type-check": "tsc --noEmit"
   },
@@ -89,6 +89,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/socket.io": "^3.0.2",
+    "cross-env": "^10.1.0",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
     "tw-animate-css": "1.3.3",
