@@ -59,8 +59,17 @@ export async function PUT(
 
     const validateDate = (dateValue: any): boolean => {
       if (!dateValue) return false
-      const date = new Date(dateValue)
-      return !isNaN(date.getTime()) && date > new Date()
+      
+      const inputDate = new Date(dateValue)
+      if (isNaN(inputDate.getTime())) return false
+      
+      // Normalize both dates to date-only (YYYY-MM-DD) to avoid timezone issues
+      const today = new Date()
+      const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+      const inputDateOnly = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate())
+      
+      // Allow same-day deliveries (date >= today)
+      return inputDateOnly >= todayDateOnly
     }
 
     const validateWeight = (weight: any): boolean => {
