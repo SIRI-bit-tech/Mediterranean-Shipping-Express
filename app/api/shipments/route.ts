@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       // Begin transaction
       await client.query('BEGIN')
 
-      // Helper function to find or create address
+      // Helper function to find or create address using atomic upsert
       const findOrCreateAddress = async (addressData: any, userId: string) => {
         const street = `${addressData.street || ''} ${addressData.apt || ''}`.trim()
         const city = addressData.city || ''
@@ -89,23 +89,13 @@ export async function POST(request: NextRequest) {
         const country = 'US' // Default country
         const postalCode = addressData.zipCode || ''
 
-        // First, try to find existing address for this user
-        const existingAddress = await client.query(
-          `SELECT id FROM addresses 
-           WHERE user_id = $1 AND street = $2 AND city = $3 AND state = $4 AND country = $5 AND postal_code = $6
-           LIMIT 1`,
-          [userId, street, city, state, country, postalCode]
-        )
-
-        if (existingAddress.rows.length > 0) {
-          // Address already exists, return its ID
-          return existingAddress.rows[0].id
-        }
-
-        // Address doesn't exist, create new one
-        const newAddress = await client.query(
+        // Atomic upsert using INSERT ... ON CONFLICT
+        // This assumes a UNIQUE constraint on (user_id, street, city, state, country, postal_code)
+        const result = await client.query(
           `INSERT INTO addresses (user_id, street, city, state, country, postal_code, latitude, longitude, is_default, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+           ON CONFLICT (user_id, street, city, state, country, postal_code) 
+           DO UPDATE SET updated_at = NOW()
            RETURNING id`,
           [
             userId,
@@ -120,7 +110,7 @@ export async function POST(request: NextRequest) {
           ]
         )
 
-        return newAddress.rows[0].id
+        return result.rows[0].id
       }
 
       // Find or create origin address

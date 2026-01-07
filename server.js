@@ -1,6 +1,8 @@
 const { createServer } = require('http')
 const { Server } = require('socket.io')
 const next = require('next')
+const { verifyToken } = require('./lib/jwt')
+const { query } = require('./lib/db')
 
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = 'localhost'
@@ -66,8 +68,6 @@ app.prepare().then(() => {
       }
 
       // Import auth verification (assuming we have a verifyToken function)
-      const { verifyToken } = require('./lib/jwt')
-      const { query } = require('./lib/db')
       
       // Verify JWT token
       const decoded = await verifyToken(token)
@@ -111,7 +111,6 @@ app.prepare().then(() => {
   // Helper function to check shipment ownership/access
   const checkShipmentAccess = async (userId, userRole, shipmentId) => {
     try {
-      const { query } = require('./lib/db')
       
       // Admin can access all shipments
       if (userRole === 'ADMIN') {

@@ -27,12 +27,12 @@ interface TrackingData {
   origin?: string
   destination?: string
   coordinates?: {
-    origin: {
+    origin?: {
       latitude: number
       longitude: number
       address: string
     }
-    destination: {
+    destination?: {
       latitude: number
       longitude: number
       address: string
@@ -110,18 +110,11 @@ export function TrackContent() {
                 }
               }
             } else {
-              // No coordinates exist - create new coordinates object with sensible defaults
+              // No coordinates exist - create new coordinates object with only current location
+              // Don't set origin/destination to 0,0 (Null Island) - leave them undefined
               updatedCoordinates = {
-                origin: {
-                  latitude: 0,
-                  longitude: 0,
-                  address: 'Origin'
-                },
-                destination: {
-                  latitude: 0,
-                  longitude: 0,
-                  address: 'Destination'
-                },
+                origin: undefined as any, // Will be handled by MapLibreMap as optional
+                destination: undefined as any, // Will be handled by MapLibreMap as optional
                 current: {
                   latitude: update.location.latitude,
                   longitude: update.location.longitude,
@@ -135,7 +128,7 @@ export function TrackContent() {
           
           return {
             ...prev,
-            status: update.status,
+            status: update.status ?? prev.status,
             currentLocation: update.location?.address || prev.currentLocation,
             coordinates: updatedCoordinates
           }
@@ -150,7 +143,7 @@ export function TrackContent() {
       if (update.type === 'status_change' && shipment) {
         setShipment(prev => prev ? {
           ...prev,
-          status: update.data.status
+          status: update.data.status ?? prev.status
         } : null)
       }
     }
