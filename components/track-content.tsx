@@ -6,11 +6,13 @@ import { useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Package, Truck, CheckCircle2, Search } from "lucide-react"
+import { Package, Truck, Search, Loader, FileCheck, MapPin, CheckCircle, PauseCircle, AlertTriangle, Ship, Plane, Settings } from "lucide-react"
 import { MapLibreMap } from "@/components/maplibre-map"
 import type { RouteResult } from "@/lib/graphhopper-service"
 import { useRealTimeTracking } from "@/lib/hooks/use-real-time-tracking"
 import type { DriverLocation, AdminUpdate } from "@/lib/socket-client"
+import { PackageRequestModal } from "@/components/package-request-modal"
+import { PackageRequestStatus } from "@/components/package-request-status"
 
 interface TrackingData {
   trackingNumber: string
@@ -24,6 +26,7 @@ interface TrackingData {
   dimensions: string
   service: string
   lastUpdate: string
+  transportMode?: string
   origin?: string
   destination?: string
   coordinates?: {
@@ -56,7 +59,7 @@ interface TimelineEvent {
   location: string
   time: string
   completed: boolean
-  icon: "check" | "truck" | "box"
+  icon: React.ComponentType<{ className?: string }>
 }
 
 export function TrackContent() {
@@ -69,6 +72,7 @@ export function TrackContent() {
   const [routeInfo, setRouteInfo] = useState<RouteResult | null>(null)
   const [driverLocation, setDriverLocation] = useState<DriverLocation | null>(null)
   const [adminUpdates, setAdminUpdates] = useState<AdminUpdate[]>([])
+  const [showPackageRequestModal, setShowPackageRequestModal] = useState(false)
 
   // Real-time tracking integration
   const { isConnected } = useRealTimeTracking({
@@ -126,12 +130,25 @@ export function TrackContent() {
           }
           // If update.location is undefined, preserve existing coordinates
           
-          return {
+          const updatedShipment = {
             ...prev,
             status: update.status ?? prev.status,
             currentLocation: update.location?.address || prev.currentLocation,
+            transportMode: update.transportMode ?? prev.transportMode,
+            carrier: update.transportMode ? 
+              `MSE ${update.transportMode === 'AIR' ? 'Express Air' : 
+                     update.transportMode === 'WATER' ? 'Ocean' : 
+                     update.transportMode === 'MULTIMODAL' ? 'Multimodal' : 'Ground'}` : 
+              prev.carrier,
             coordinates: updatedCoordinates
           }
+          
+          // Regenerate timeline when transport mode or status changes
+          if (update.status || update.transportMode) {
+            setTimeline(generateProgressiveTimeline(updatedShipment))
+          }
+          
+          return updatedShipment
         })
       }
     },
@@ -177,21 +194,16 @@ export function TrackContent() {
             location: item.location,
             time: new Date(item.timestamp).toLocaleString(),
             completed: true,
-            icon: getIconForStatus(item.status)
+            icon: getIconForStatus(item.status, shipmentData.data.transportMode)
           }))
           setTimeline(formattedTimeline)
         } else {
-          // Fallback to basic timeline if no checkpoints exist
-          setTimeline([
-            {
-              title: `Shipment ${shipmentData.data.status.replace('_', ' ')}`,
-              location: shipmentData.data.currentLocation || 'Processing',
-              time: new Date(shipmentData.data.lastUpdate).toLocaleString(),
-              completed: true,
-              icon: "box",
-            }
-          ])
+          // Generate progressive timeline based on current status (like the mockup)
+          setTimeline(generateProgressiveTimeline(shipmentData.data))
         }
+      } else {
+        // Generate progressive timeline based on current status (like the mockup)
+        setTimeline(generateProgressiveTimeline(shipmentData.data))
       }
     } catch (err) {
       console.error("Tracking error:", err)
@@ -201,10 +213,182 @@ export function TrackContent() {
     }
   }
 
-  const getIconForStatus = (status: string): "check" | "truck" | "box" => {
-    if (status === 'completed' || status === 'delivered') return 'check'
-    if (status === 'in-transit' || status === 'out-for-delivery') return 'truck'
-    return 'box'
+  const getIconForStatus = (status: string, transportMode?: string): React.ComponentType<{ className?: string }> => {
+    switch (status.toUpperCase()) {
+      case 'PROCESSING':
+        return Loader
+      case 'IN_TRANSIT':
+        // Use transport mode specific icon for in transit
+        switch (transportMode?.toUpperCase()) {
+          case 'AIR':
+            return Plane
+          case 'WATER':
+            return Ship
+          case 'LAND':
+          default:
+            return Truck
+        }
+      case 'IN_CUSTOMS':
+        return FileCheck
+      case 'OUT_FOR_DELIVERY':
+        return MapPin
+      case 'DELIVERED':
+        return CheckCircle
+      case 'ON_HOLD':
+        return PauseCircle
+      case 'EXCEPTION':
+        return AlertTriangle
+      default:
+        return Package
+    }
+  }
+
+  // Generate progressive timeline based on current status (like UPS/FedEx)
+  const generateProgressiveTimeline = (shipmentData: any) => {
+    const currentStatus = shipmentData.status
+    const currentLocation = shipmentData.currentLocation || 'Processing'
+    const originCity = shipmentData.originCity || 'Origin'
+    const destinationCity = shipmentData.destinationCity || 'Destination'
+    const transportMode = shipmentData.transportMode || 'LAND'
+    
+    // Get transport mode specific icon
+    const getTransportIcon = () => {
+      switch (transportMode.toUpperCase()) {
+        case 'AIR':
+          return Plane
+        case 'WATER':
+          return Ship
+        case 'LAND':
+        default:
+          return Truck
+      }
+    }
+    
+    const TransportIcon = getTransportIcon()
+    
+    // Define the complete journey steps
+    const allSteps = [
+      {
+        status: 'PROCESSING',
+        title: 'Shipment Initiated',
+        location: originCity,
+        icon: Loader,
+        order: 1
+      },
+      {
+        status: 'PROCESSING',
+        title: 'Processed at Origin',
+        location: originCity,
+        icon: Loader,
+        order: 2
+      },
+      {
+        status: 'IN_TRANSIT',
+        title: 'Departed Logistics Hub',
+        location: originCity,
+        icon: TransportIcon,
+        order: 3
+      },
+      {
+        status: 'IN_TRANSIT',
+        title: 'In Transit',
+        location: currentLocation,
+        icon: TransportIcon,
+        order: 4
+      },
+      {
+        status: 'OUT_FOR_DELIVERY',
+        title: 'Arrived at Sort Facility',
+        location: destinationCity,
+        icon: MapPin,
+        order: 5
+      },
+      {
+        status: 'OUT_FOR_DELIVERY',
+        title: 'Out for Delivery',
+        location: destinationCity,
+        icon: MapPin,
+        order: 6
+      },
+      {
+        status: 'DELIVERED',
+        title: 'Delivered',
+        location: destinationCity,
+        icon: CheckCircle,
+        order: 7
+      }
+    ]
+
+    // Determine which steps to show based on current status
+    let stepsToShow = []
+    
+    switch (currentStatus) {
+      case 'PROCESSING':
+        stepsToShow = allSteps.slice(0, 2) // Show: Initiated, Processed
+        break
+      case 'IN_TRANSIT':
+        stepsToShow = allSteps.slice(0, 4) // Show: Initiated, Processed, Departed, In Transit
+        break
+      case 'IN_CUSTOMS':
+        stepsToShow = [
+          ...allSteps.slice(0, 4),
+          {
+            status: 'IN_CUSTOMS',
+            title: 'In Customs',
+            location: currentLocation,
+            icon: FileCheck,
+            order: 4.5
+          }
+        ]
+        break
+      case 'OUT_FOR_DELIVERY':
+        stepsToShow = allSteps.slice(0, 6) // Show: All except Delivered
+        break
+      case 'DELIVERED':
+        stepsToShow = allSteps // Show all steps
+        break
+      case 'ON_HOLD':
+        stepsToShow = [
+          ...allSteps.slice(0, 2),
+          {
+            status: 'ON_HOLD',
+            title: 'On Hold',
+            location: currentLocation,
+            icon: PauseCircle,
+            order: 2.5
+          }
+        ]
+        break
+      case 'EXCEPTION':
+        stepsToShow = [
+          ...allSteps.slice(0, 2),
+          {
+            status: 'EXCEPTION',
+            title: 'Exception',
+            location: currentLocation,
+            icon: AlertTriangle,
+            order: 2.5
+          }
+        ]
+        break
+      default:
+        stepsToShow = allSteps.slice(0, 1) // Just show initiated
+    }
+
+    // Convert to timeline format with realistic timestamps
+    return stepsToShow.map((step, index) => {
+      // Generate realistic timestamps (each step 1-2 days apart)
+      const baseTime = new Date(shipmentData.lastUpdate)
+      const stepTime = new Date(baseTime.getTime() - (stepsToShow.length - index - 1) * 24 * 60 * 60 * 1000)
+      
+      return {
+        title: step.title,
+        location: step.location,
+        time: stepTime.toLocaleString(),
+        completed: true,
+        icon: step.icon
+      }
+    })
   }
 
   const handleRouteCalculated = (route: RouteResult) => {
@@ -245,7 +429,7 @@ export function TrackContent() {
             <div className="flex-1 relative">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <Input
-                placeholder="1Z999AA10123456784"
+                placeholder="MSE-A1B2C3D4"
                 value={trackingNumber}
                 onChange={(e) => setTrackingNumber(e.target.value)}
                 className="pl-12 text-lg px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-200"
@@ -274,10 +458,22 @@ export function TrackContent() {
                 <div>
                   <div className="flex items-center gap-3 mb-2">
                     <span className="inline-flex items-center gap-2 bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold">
-                      <CheckCircle2 className="h-4 w-4" />
+                      {(() => {
+                        const StatusIcon = getIconForStatus(shipment.status, shipment.transportMode)
+                        return <StatusIcon className="h-4 w-4" />
+                      })()}
                       {shipment.status}
                     </span>
                     <span className="text-gray-600 text-sm font-mono"># {shipment.trackingNumber}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowPackageRequestModal(true)}
+                      className="ml-auto"
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Manage Package
+                    </Button>
                   </div>
                   <h2 className="text-3xl font-bold text-black mb-2">
                     Estimated Delivery: {shipment.estimatedDelivery}
@@ -320,6 +516,7 @@ export function TrackContent() {
                         shipmentLocation={shipment.coordinates.current}
                         originLocation={shipment.coordinates.origin}
                         destinationLocation={shipment.coordinates.destination}
+                        transportMode={shipment.transportMode as 'AIR' | 'LAND' | 'WATER' | 'MULTIMODAL' || 'LAND'}
                         driverLocation={driverLocation ? {
                           latitude: driverLocation.latitude,
                           longitude: driverLocation.longitude
@@ -354,9 +551,7 @@ export function TrackContent() {
                               event.completed ? "bg-yellow-500" : "bg-gray-300"
                             }`}
                           >
-                            {event.icon === "check" && <CheckCircle2 className="h-6 w-6 text-white" />}
-                            {event.icon === "truck" && <Truck className="h-6 w-6 text-white" />}
-                            {event.icon === "box" && <Package className="h-6 w-6 text-white" />}
+                            <event.icon className="h-6 w-6 text-white" />
                           </div>
                           {idx < timeline.length - 1 && (
                             <div
@@ -378,6 +573,11 @@ export function TrackContent() {
 
               {/* Right Column - Details */}
               <div className="space-y-6">
+                {/* Package Request Status */}
+                <PackageRequestStatus 
+                  trackingNumber={shipment.trackingNumber}
+                />
+
                 <Card className="p-6 bg-white">
                   <p className="text-gray-600 text-xs font-bold uppercase tracking-wide mb-3">FROM</p>
                   <p className="font-bold text-black text-lg mb-1">Origin Address</p>
@@ -427,6 +627,20 @@ export function TrackContent() {
             </div>
           </div>
         </section>
+      )}
+
+      {/* Package Request Modal */}
+      {shipment && (
+        <PackageRequestModal
+          isOpen={showPackageRequestModal}
+          onClose={() => setShowPackageRequestModal(false)}
+          trackingNumber={shipment.trackingNumber}
+          currentStatus={shipment.status}
+          onRequestSubmitted={(request) => {
+            console.log('Package request submitted:', request)
+            // Optionally refresh the page or update state
+          }}
+        />
       )}
     </>
   )

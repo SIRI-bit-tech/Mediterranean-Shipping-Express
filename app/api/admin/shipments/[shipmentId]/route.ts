@@ -233,6 +233,52 @@ export async function PUT(
       // Don't block the response, just log the error
     }
 
+    // Emit Socket.IO event for real-time updates
+    try {
+      // Check if Socket.IO server instance is available
+      const io = (global as any).io
+      
+      if (io) {
+        // Create shipment update event for real-time tracking
+        const shipmentUpdate = {
+          shipmentId: updatedShipment.tracking_number,
+          status: updatedShipment.status,
+          transportMode: updatedShipment.transport_mode,
+          location: updatedShipment.current_latitude && updatedShipment.current_longitude ? {
+            latitude: updatedShipment.current_latitude,
+            longitude: updatedShipment.current_longitude,
+            address: updatedShipment.current_location || `${updatedShipment.current_city || ''}, ${updatedShipment.current_country || ''}`.trim()
+          } : undefined,
+          timestamp: new Date().toISOString(),
+          updatedBy: 'admin',
+          adminId: admin.id
+        }
+
+        // Emit to shipment-specific room
+        io.to(`shipment-${updatedShipment.tracking_number}`).emit(`shipment-update-${updatedShipment.tracking_number}`, shipmentUpdate)
+        
+        // Also emit admin update for admin dashboard
+        const adminUpdate = {
+          type: 'shipment_update',
+          shipmentId: updatedShipment.tracking_number,
+          adminId: admin.id,
+          adminName: admin.name || admin.email,
+          data: {
+            status: updatedShipment.status,
+            location: shipmentUpdate.location
+          },
+          timestamp: new Date().toISOString()
+        }
+        
+        io.emit('admin-activity-broadcast', adminUpdate)
+        
+        console.log(`[Socket.IO] Emitted shipment update for ${updatedShipment.tracking_number}`)
+      }
+    } catch (socketError) {
+      console.error('Error emitting Socket.IO event:', socketError)
+      // Don't block the response, just log the error
+    }
+
     return NextResponse.json({
       success: true,
       message: "Shipment updated successfully",

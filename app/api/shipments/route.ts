@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { query, pool } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
 import { transformShipmentRows, ShipmentRow } from "@/lib/shipment-utils"
+import { generateTrackingNumber } from "@/lib/api-utils"
 
 export async function GET(request: NextRequest) {
   try {
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate tracking number
-    const trackingNumber = `MSE${Date.now()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`
+    const trackingNumber = generateTrackingNumber()
 
     // For now, we'll store address data as strings until we implement proper address management
     const originAddressString = `${originAddress.street || ''}, ${originAddress.apt || ''}, ${originAddress.city || ''}, ${originAddress.state || ''} ${originAddress.zipCode || ''}`.trim()
@@ -119,14 +120,15 @@ export async function POST(request: NextRequest) {
       // Find or create destination address
       destinationAddressId = await findOrCreateAddress(destinationAddress, user.id)
 
-      // Insert new shipment with proper address IDs
+      // Insert new shipment with proper address IDs and initialize current location at origin
       const result = await client.query(
         `INSERT INTO shipments (
           tracking_number, user_id, origin_address_id, destination_address_id,
           status, transport_mode, weight, dimensions, 
-          description, package_value, special_handling, is_international, 
+          description, package_value, special_handling, is_international,
+          current_location, current_city, current_country,
           estimated_delivery_date, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
         RETURNING id, tracking_number, status, created_at`,
         [
           trackingNumber,
@@ -141,6 +143,10 @@ export async function POST(request: NextRequest) {
           packageValue || null,
           specialHandling || null,
           isInternational || false,
+          // Initialize current location at origin
+          `${originAddress.street || ''}, ${originAddress.city || ''}, ${originAddress.state || ''} ${originAddress.zipCode || ''}`.trim(),
+          originAddress.city || '',
+          originAddress.country || 'US',
           new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days from now
         ]
       )

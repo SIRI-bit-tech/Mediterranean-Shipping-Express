@@ -34,10 +34,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // Use GraphHopper for real-time geocoding
     const getLocationCoordinates = async (city: string, state: string | null, country: string, street?: string) => {
       try {
-        // Validate required fields
+        // Provide Swiss fallback for missing location data
         if (!city || !country) {
-          console.warn(`Missing required location data: city=${city}, country=${country}`)
-          return { lat: 0, lng: 0 }
+          console.warn(`Missing required location data: city=${city}, country=${country} - using Swiss fallback`)
+          // Use Zurich, Switzerland as fallback
+          return { lat: 47.3769, lng: 8.5417 }
         }
 
         const addressString = [street, city, state, country].filter(Boolean).join(', ')
@@ -72,7 +73,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           }
         }
 
-        // Final fallback: country center coordinates
+        // Final fallback: country center coordinates with Swiss locations
         const countryDefaults: { [key: string]: { lat: number; lng: number } } = {
           'US': { lat: 39.8283, lng: -98.5795 },
           'United States': { lat: 39.8283, lng: -98.5795 },
@@ -93,9 +94,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           'Brazil': { lat: -14.2350, lng: -51.9253 },
           'India': { lat: 20.5937, lng: 78.9629 },
           'Russia': { lat: 61.5240, lng: 105.3188 },
+          'Switzerland': { lat: 47.3769, lng: 8.5417 }, // Zurich
+          'CH': { lat: 47.3769, lng: 8.5417 }, // Zurich
         }
         
-        return countryDefaults[country] || { lat: 0, lng: 0 }
+        return countryDefaults[country] || { lat: 47.3769, lng: 8.5417 } // Default to Zurich, Switzerland
       } catch (error) {
         console.error(`Geocoding error for ${city}, ${country}:`, error)
         return { lat: 0, lng: 0 }
@@ -163,6 +166,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       service: `MSE ${shipment.is_international ? 'International' : 'Domestic'} ${
         shipment.transport_mode === 'AIR' ? 'Priority Air' : 'Standard'
       }`,
+      transportMode: shipment.transport_mode,
       lastUpdate: shipment.updated_at,
       origin: `${shipment.origin_street}, ${shipment.origin_city}, ${shipment.origin_country}`,
       destination: `${shipment.dest_street}, ${shipment.dest_city}, ${shipment.dest_country}`,

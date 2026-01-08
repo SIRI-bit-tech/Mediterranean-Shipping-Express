@@ -6,8 +6,8 @@
 
 import { fallbackMapService } from './fallback-map-service'
 
-const GRAPHHOPPER_BASE_URL = process.env.GRAPHHOPPER_BASE_URL || 'https://graphhopper.com/api/1'
-const GRAPHHOPPER_API_KEY = process.env.GRAPHHOPPER_API_KEY
+const GRAPHHOPPER_BASE_URL = process.env.GRAPHHOPPER_BASE_URL || process.env.NEXT_PUBLIC_GRAPHHOPPER_BASE_URL || 'https://graphhopper.com/api/1'
+const GRAPHHOPPER_API_KEY = process.env.GRAPHHOPPER_API_KEY || process.env.NEXT_PUBLIC_GRAPHHOPPER_API_KEY
 
 interface Coordinates {
   latitude: number
