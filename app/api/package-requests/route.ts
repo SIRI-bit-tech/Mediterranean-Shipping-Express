@@ -5,6 +5,22 @@ import { requireAuth } from "@/lib/auth"
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    
+    // Check if this is a retrieval request (has trackingNumber but no requestType)
+    if (body.trackingNumber && !body.requestType) {
+      return handlePackageRequestRetrieval(request, body)
+    }
+    
+    // Otherwise, handle as creation request
+    return handlePackageRequestCreation(request, body)
+  } catch (error) {
+    console.error('Error in package requests POST:', error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+async function handlePackageRequestCreation(request: NextRequest, body: any) {
+  try {
     const { shipmentId, requestType, requestData, reason, customerNotes } = body
 
     // Validate request type
@@ -130,6 +146,93 @@ export async function POST(request: NextRequest) {
   }
 }
 
+async function handlePackageRequestRetrieval(request: NextRequest, body: any) {
+  try {
+    const { trackingNumber, status, verificationValue } = body
+
+    // Try to get authenticated user (optional)
+    let user = null
+    try {
+      user = await requireAuth(request)
+    } catch (error) {
+      // User not authenticated - that's okay for viewing requests by tracking number with verification
+    }
+
+    let whereClause = 'WHERE 1=1'
+    const params: any[] = []
+    let paramIndex = 1
+
+    // Filter by status if provided
+    if (status) {
+      whereClause += ` AND pr.status = $${paramIndex}`
+      params.push(status)
+      paramIndex++
+    }
+
+    // Handle authentication and access control
+    if (user && user.role !== 'ADMIN') {
+      // Authenticated non-admin user: show only their requests
+      whereClause += ` AND s.user_id = $${paramIndex}`
+      params.push(user.id)
+      paramIndex++
+      
+      // Optional tracking number filter for authenticated users
+      if (trackingNumber) {
+        whereClause += ` AND s.tracking_number = $${paramIndex}`
+        params.push(trackingNumber)
+        paramIndex++
+      }
+    } else if (!user) {
+      // Anonymous user: require both tracking number and verification
+      if (!trackingNumber || !verificationValue) {
+        // Missing required fields for anonymous access
+        return NextResponse.json({
+          success: true,
+          data: []
+        })
+      }
+      
+      // Add verification conditions for anonymous access
+      whereClause += ` AND s.tracking_number = $${paramIndex}`
+      params.push(trackingNumber)
+      paramIndex++
+      
+      // Verify with postal code OR the shipment owner's email
+      whereClause += ` AND (dest_addr.postal_code = $${paramIndex} OR owner.email = $${paramIndex})`
+      params.push(verificationValue)
+      paramIndex++
+    }
+    // Admin users (user.role === 'ADMIN') get all requests without additional filters
+
+    const result = await query(
+      `SELECT 
+        pr.*,
+        s.tracking_number,
+        s.status as shipment_status,
+        u.name as user_name,
+        u.email as user_email,
+        approver.name as approved_by_name
+       FROM package_requests pr
+       JOIN shipments s ON pr.shipment_id = s.id
+       LEFT JOIN users u ON pr.user_id = u.id
+       LEFT JOIN users owner ON s.user_id = owner.id
+       LEFT JOIN users approver ON pr.approved_by = approver.id
+       LEFT JOIN addresses dest_addr ON s.destination_address_id = dest_addr.id
+       ${whereClause}
+       ORDER BY pr.created_at DESC`,
+      params
+    )
+
+    return NextResponse.json({
+      success: true,
+      data: result.rows
+    })
+  } catch (error) {
+    console.error('Error fetching package requests:', error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -184,8 +287,8 @@ export async function GET(request: NextRequest) {
       params.push(trackingNumber)
       paramIndex++
       
-      // Verify with postal code OR the shipment owner's email (not just any email)
-      whereClause += ` AND (dest_addr.postal_code = $${paramIndex} OR (s.user_id = u.id AND u.email = $${paramIndex}))`
+      // Verify with postal code OR the shipment owner's email
+      whereClause += ` AND (dest_addr.postal_code = $${paramIndex} OR owner.email = $${paramIndex})`
       params.push(verificationValue)
       paramIndex++
     }
@@ -202,6 +305,7 @@ export async function GET(request: NextRequest) {
        FROM package_requests pr
        JOIN shipments s ON pr.shipment_id = s.id
        LEFT JOIN users u ON pr.user_id = u.id
+       LEFT JOIN users owner ON s.user_id = owner.id
        LEFT JOIN users approver ON pr.approved_by = approver.id
        LEFT JOIN addresses dest_addr ON s.destination_address_id = dest_addr.id
        ${whereClause}

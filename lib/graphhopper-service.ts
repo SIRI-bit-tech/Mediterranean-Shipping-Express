@@ -9,10 +9,7 @@ import { fallbackMapService } from './fallback-map-service'
 const GRAPHHOPPER_BASE_URL = process.env.GRAPHHOPPER_BASE_URL || process.env.NEXT_PUBLIC_GRAPHHOPPER_BASE_URL || 'https://graphhopper.com/api/1'
 const GRAPHHOPPER_API_KEY = process.env.GRAPHHOPPER_API_KEY
 
-// Runtime check for API key
-if (!GRAPHHOPPER_API_KEY) {
-  throw new Error('GRAPHHOPPER_API_KEY environment variable is required but not set')
-}
+// Note: API key validation is done lazily in the constructor to avoid build-time errors
 
 interface Coordinates {
   latitude: number
@@ -462,8 +459,42 @@ class GraphHopperService {
   }
 }
 
-// Export singleton instance
-export const graphHopperService = new GraphHopperService()
+// Export singleton instance - lazy initialization
+let _graphHopperServiceInstance: GraphHopperService | null = null
+
+export const graphHopperService = {
+  get instance(): GraphHopperService {
+    if (!_graphHopperServiceInstance) {
+      _graphHopperServiceInstance = new GraphHopperService()
+    }
+    return _graphHopperServiceInstance
+  },
+  
+  // Delegate all methods to the instance
+  async geocodeAddress(address: any) {
+    return this.instance.geocodeAddress(address)
+  },
+  
+  async getRoute(start: any, end: any, profile?: any) {
+    return this.instance.getRoute(start, end, profile)
+  },
+  
+  async getDistanceMatrix(locations: any, profile?: any) {
+    return this.instance.getDistanceMatrix(locations, profile)
+  },
+  
+  async calculateETA(start: any, end: any, profile?: any) {
+    return this.instance.calculateETA(start, end, profile)
+  },
+  
+  async reverseGeocode(coordinates: any) {
+    return this.instance.reverseGeocode(coordinates)
+  },
+  
+  async healthCheck() {
+    return this.instance.healthCheck()
+  }
+}
 
 // Export types
 export type {

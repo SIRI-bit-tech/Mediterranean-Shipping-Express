@@ -22,6 +22,14 @@ export async function PUT(
       return NextResponse.json({ error: "Invalid action" }, { status: 400 })
     }
 
+    // Action verb mapping for proper grammar
+    const actionVerb: Record<string, string> = {
+      APPROVE: 'approved',
+      REJECT: 'rejected', 
+      COMPLETE: 'completed',
+      CANCEL: 'cancelled'
+    }
+
     // Start database transaction
     const client = await pool.connect()
     let updatedRequest: any
@@ -68,7 +76,9 @@ export async function PUT(
               shipmentUpdates.on_hold_reason = packageRequest.reason || 'Customer requested hold'
               break
             case 'REDIRECT': {
-              const redirectData = JSON.parse(packageRequest.request_data)
+              const redirectData = typeof packageRequest.request_data === 'string' 
+                ? JSON.parse(packageRequest.request_data) 
+                : packageRequest.request_data
               if (redirectData.newAddress) {
                 // In a real system, you'd create a new address record
                 shipmentUpdates.current_location = redirectData.newAddress
@@ -79,7 +89,9 @@ export async function PUT(
               shipmentUpdates.status = 'RETURNING'
               break
             case 'RESCHEDULE': {
-              const rescheduleData = JSON.parse(packageRequest.request_data)
+              const rescheduleData = typeof packageRequest.request_data === 'string' 
+                ? JSON.parse(packageRequest.request_data) 
+                : packageRequest.request_data
               if (rescheduleData.newDeliveryDate) {
                 shipmentUpdates.estimated_delivery_date = rescheduleData.newDeliveryDate
               }
@@ -147,7 +159,7 @@ export async function PUT(
             packageRequest.shipment_id,
             shipmentUpdates.status || packageRequest.shipment_status,
             shipmentUpdates.current_location || 'Admin Action',
-            `Package request ${action.toLowerCase()}ed: ${packageRequest.request_type}`
+            `Package request ${actionVerb[action] ?? action.toLowerCase()}: ${packageRequest.request_type}`
           ]
         )
       }
@@ -163,7 +175,7 @@ export async function PUT(
           oldStatus,
           newStatus,
           admin.id,
-          adminNotes || `Request ${action.toLowerCase()}ed by admin`
+          adminNotes || `Request ${actionVerb[action] ?? action.toLowerCase()} by admin`
         ]
       )
 
@@ -219,7 +231,7 @@ export async function PUT(
 
     return NextResponse.json({
       success: true,
-      message: `Package request ${action.toLowerCase()}ed successfully`,
+      message: `Package request ${actionVerb[action] ?? action.toLowerCase()} successfully`,
       data: {
         id: updatedRequest.id,
         status: updatedRequest.status,
