@@ -4,10 +4,10 @@
 -- Update shipments with null current_city to use Swiss locations
 UPDATE shipments 
 SET 
-  current_city = 'Zurich',
-  current_country = 'Switzerland',
-  current_latitude = 47.3769,
-  current_longitude = 8.5417
+  current_city = COALESCE(current_city, 'Zurich'),
+  current_country = COALESCE(current_country, 'Switzerland'),
+  current_latitude = COALESCE(current_latitude, 47.3769),
+  current_longitude = COALESCE(current_longitude, 8.5417)
 WHERE current_city IS NULL OR current_country IS NULL;
 
 -- Update addresses with missing city/country to use Swiss locations

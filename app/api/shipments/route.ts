@@ -83,42 +83,51 @@ export async function POST(request: NextRequest) {
       await client.query('BEGIN')
 
       // Helper function to find or create address using atomic upsert
-      const findOrCreateAddress = async (addressData: any, userId: string) => {
+      const findOrCreateAddress = async (addressData: any, userId: string, label: string = 'shipping') => {
         const street = `${addressData.street || ''} ${addressData.apt || ''}`.trim()
         const city = addressData.city || ''
         const state = addressData.state || ''
-        const country = 'US' // Default country
+        const country = addressData.country || 'US' // Default country
         const postalCode = addressData.zipCode || ''
 
-        // Atomic upsert using INSERT ... ON CONFLICT
-        // This assumes a UNIQUE constraint on (user_id, street, city, state, country, postal_code)
-        const result = await client.query(
-          `INSERT INTO addresses (user_id, street, city, state, country, postal_code, latitude, longitude, is_default, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-           ON CONFLICT (user_id, street, city, state, country, postal_code) 
-           DO UPDATE SET updated_at = NOW()
-           RETURNING id`,
-          [
-            userId,
-            street,
-            city,
-            state,
-            country,
-            postalCode,
-            null, // latitude - to be populated later via geocoding
-            null, // longitude - to be populated later via geocoding
-            false // not default unless explicitly set
-          ]
-        )
+        try {
+          // Atomic upsert using INSERT ... ON CONFLICT
+          // Updated to include label in the unique constraint
+          const result = await client.query(
+            `INSERT INTO addresses (user_id, street, city, state, country, postal_code, label, latitude, longitude, is_default, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+             ON CONFLICT (user_id, street, city, state, country, postal_code, label) 
+             DO UPDATE SET updated_at = NOW()
+             RETURNING id`,
+            [
+              userId,
+              street,
+              city,
+              state || '', // Use empty string instead of NULL
+              country,
+              postalCode || '', // Use empty string instead of NULL
+              label,
+              null, // latitude - to be populated later via geocoding
+              null, // longitude - to be populated later via geocoding
+              false // not default unless explicitly set
+            ]
+          )
 
-        return result.rows[0].id
+          return result.rows[0].id
+        } catch (dbError: any) {
+          // Handle unique constraint violation with user-friendly message
+          if (dbError.code === '23505' && dbError.constraint === 'addresses_user_composite_unique') {
+            throw new Error(`You already have a ${label} address with these details. Please use a different label or modify the address.`)
+          }
+          throw dbError
+        }
       }
 
       // Find or create origin address
-      originAddressId = await findOrCreateAddress(originAddress, user.id)
+      originAddressId = await findOrCreateAddress(originAddress, user.id, originAddress.label || 'shipping')
 
-      // Find or create destination address
-      destinationAddressId = await findOrCreateAddress(destinationAddress, user.id)
+      // Find or create destination address  
+      destinationAddressId = await findOrCreateAddress(destinationAddress, user.id, destinationAddress.label || 'shipping')
 
       // Insert new shipment with proper address IDs and initialize current location at origin
       const result = await client.query(
@@ -169,10 +178,19 @@ export async function POST(request: NextRequest) {
         message: "Shipment created successfully"
       }, { status: 201 })
 
-    } catch (transactionError) {
+    } catch (transactionError: any) {
       // Rollback transaction on any error
       await client.query('ROLLBACK')
       console.error('Transaction error during shipment creation:', transactionError)
+      
+      // Handle user-friendly error messages
+      if (transactionError.message && transactionError.message.includes('already have a')) {
+        return NextResponse.json({ 
+          error: transactionError.message,
+          type: 'address_conflict'
+        }, { status: 409 })
+      }
+      
       throw transactionError
     } finally {
       // Always release the client back to the pool

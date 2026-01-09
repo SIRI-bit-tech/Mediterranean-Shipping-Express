@@ -135,25 +135,19 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const trackingNumber = searchParams.get('trackingNumber')
     const status = searchParams.get('status')
+    const verificationValue = searchParams.get('verificationValue') // postal code or email
 
     // Try to get authenticated user (optional)
     let user = null
     try {
       user = await requireAuth(request)
     } catch (error) {
-      // User not authenticated - that's okay for viewing requests by tracking number
+      // User not authenticated - that's okay for viewing requests by tracking number with verification
     }
 
     let whereClause = 'WHERE 1=1'
     const params: any[] = []
     let paramIndex = 1
-
-    // Filter by tracking number if provided
-    if (trackingNumber) {
-      whereClause += ` AND s.tracking_number = $${paramIndex}`
-      params.push(trackingNumber)
-      paramIndex++
-    }
 
     // Filter by status if provided
     if (status) {
@@ -162,19 +156,40 @@ export async function GET(request: NextRequest) {
       paramIndex++
     }
 
-    // If user is authenticated and not admin, only show their requests
-    // If no user and no tracking number, return empty (prevent data leakage)
+    // Handle authentication and access control
     if (user && user.role !== 'ADMIN') {
+      // Authenticated non-admin user: show only their requests
       whereClause += ` AND s.user_id = $${paramIndex}`
       params.push(user.id)
       paramIndex++
-    } else if (!user && !trackingNumber) {
-      // Anonymous users must provide tracking number
-      return NextResponse.json({
-        success: true,
-        data: []
-      })
+      
+      // Optional tracking number filter for authenticated users
+      if (trackingNumber) {
+        whereClause += ` AND s.tracking_number = $${paramIndex}`
+        params.push(trackingNumber)
+        paramIndex++
+      }
+    } else if (!user) {
+      // Anonymous user: require both tracking number and verification
+      if (!trackingNumber || !verificationValue) {
+        // Missing required fields for anonymous access
+        return NextResponse.json({
+          success: true,
+          data: []
+        })
+      }
+      
+      // Add verification conditions for anonymous access
+      whereClause += ` AND s.tracking_number = $${paramIndex}`
+      params.push(trackingNumber)
+      paramIndex++
+      
+      // Verify with postal code OR the shipment owner's email (not just any email)
+      whereClause += ` AND (dest_addr.postal_code = $${paramIndex} OR (s.user_id = u.id AND u.email = $${paramIndex}))`
+      params.push(verificationValue)
+      paramIndex++
     }
+    // Admin users (user.role === 'ADMIN') get all requests without additional filters
 
     const result = await query(
       `SELECT 
@@ -188,6 +203,7 @@ export async function GET(request: NextRequest) {
        JOIN shipments s ON pr.shipment_id = s.id
        LEFT JOIN users u ON pr.user_id = u.id
        LEFT JOIN users approver ON pr.approved_by = approver.id
+       LEFT JOIN addresses dest_addr ON s.destination_address_id = dest_addr.id
        ${whereClause}
        ORDER BY pr.created_at DESC`,
       params

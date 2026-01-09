@@ -7,7 +7,12 @@
 import { fallbackMapService } from './fallback-map-service'
 
 const GRAPHHOPPER_BASE_URL = process.env.GRAPHHOPPER_BASE_URL || process.env.NEXT_PUBLIC_GRAPHHOPPER_BASE_URL || 'https://graphhopper.com/api/1'
-const GRAPHHOPPER_API_KEY = process.env.GRAPHHOPPER_API_KEY || process.env.NEXT_PUBLIC_GRAPHHOPPER_API_KEY
+const GRAPHHOPPER_API_KEY = process.env.GRAPHHOPPER_API_KEY
+
+// Runtime check for API key
+if (!GRAPHHOPPER_API_KEY) {
+  throw new Error('GRAPHHOPPER_API_KEY environment variable is required but not set')
+}
 
 interface Coordinates {
   latitude: number
