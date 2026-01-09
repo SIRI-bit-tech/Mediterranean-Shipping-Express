@@ -7,8 +7,12 @@
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint 
-    WHERE conname = 'addresses_user_composite_unique'
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class t ON c.conrelid = t.oid
+    JOIN pg_namespace n ON t.relnamespace = n.oid
+    WHERE c.conname = 'addresses_user_composite_unique'
+      AND t.relname = 'addresses'
+      AND n.nspname = 'public'
   ) THEN
     ALTER TABLE addresses 
     ADD CONSTRAINT addresses_user_composite_unique 

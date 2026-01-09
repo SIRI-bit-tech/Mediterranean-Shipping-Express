@@ -2,6 +2,10 @@
 -- Date: 2026-01-08
 -- Description: Set current location fields for existing shipments that don't have them
 
+-- Create index on origin_address_id to improve subquery performance
+CREATE INDEX IF NOT EXISTS idx_shipments_origin_address_id 
+ON shipments(origin_address_id);
+
 -- Update shipments that have null current location data
 UPDATE shipments 
 SET 

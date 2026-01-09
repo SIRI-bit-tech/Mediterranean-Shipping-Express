@@ -43,8 +43,18 @@ async function runSchema() {
     
     console.log('🚀 Executing database schema...')
     
-    // Execute the schema SQL
-    await pool.query(schemaSQL)
+    // Execute the schema SQL in a transaction
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query(schemaSQL)
+      await client.query('COMMIT')
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
     
     console.log('✅ Database schema executed successfully!')
     console.log('🎉 Schema setup complete!')

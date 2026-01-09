@@ -50,13 +50,19 @@ export function PackageRequestStatus({ trackingNumber, verificationValue, classN
     try {
       setLoading(true)
       
-      // Build query parameters
-      const params = new URLSearchParams({ trackingNumber })
-      if (verificationValue) {
-        params.append('verificationValue', verificationValue)
+      // Send sensitive data in POST body instead of URL parameters
+      const requestBody = {
+        trackingNumber,
+        ...(verificationValue && { verificationValue })
       }
       
-      const response = await fetch(`/api/package-requests?${params.toString()}`)
+      const response = await fetch('/api/package-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      })
       
       if (response.ok) {
         const data = await response.json()
