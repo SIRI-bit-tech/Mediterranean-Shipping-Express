@@ -35,7 +35,7 @@ export const DEFAULT_LIMIT = 20
 export const MAX_LIMIT = 100
 
 // Tracking number prefix
-export const TRACKING_NUMBER_PREFIX = "1Z"
+export const TRACKING_NUMBER_PREFIX = "MSE-"
 export const TRACKING_NUMBER_LENGTH = 12
 
 // Color scheme - MSE Brand
@@ -97,7 +97,7 @@ export const VALIDATION = {
   PASSWORD_MIN_LENGTH: 8,
   PHONE_PATTERN: /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/,
   EMAIL_PATTERN: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-  TRACKING_NUMBER_PATTERN: /^1Z[A-Z0-9]{10}$/,
+  TRACKING_NUMBER_PATTERN: /^MSE-[A-Z0-9]{8}$/,
 } as const
 
 // Feature flags

@@ -56,8 +56,8 @@ export function validateRequest(method: string, allowedMethods: string[]) {
 
 export function generateTrackingNumber(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-  let result = "1Z"
-  for (let i = 0; i < 10; i++) {
+  let result = "MSE-"
+  for (let i = 0; i < 8; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length))
   }
   return result

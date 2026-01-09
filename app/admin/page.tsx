@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AdminShipmentTable } from "@/components/admin-shipment-table"
 import { AdminShipmentEditModal } from "@/components/admin-shipment-edit-modal"
 import { AdminAnalytics } from "@/components/admin-analytics"
+import { AdminPackageRequests } from "@/components/admin-package-requests"
 import { Search, Filter, Download, Shield, Loader2, AlertCircle } from "lucide-react"
 
 export default function AdminDashboard() {
@@ -291,6 +292,7 @@ export default function AdminDashboard() {
         <Tabs defaultValue="shipments" className="w-full">
           <TabsList className="mb-8">
             <TabsTrigger value="shipments">Shipments</TabsTrigger>
+            <TabsTrigger value="package-requests">Package Requests</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="users">Users & Drivers</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -352,6 +354,11 @@ export default function AdminDashboard() {
               onDelete={handleDelete}
               onStatusUpdate={handleStatusUpdate}
             />
+          </TabsContent>
+
+          {/* Package Requests Tab */}
+          <TabsContent value="package-requests">
+            <AdminPackageRequests />
           </TabsContent>
 
           {/* Analytics Tab */}

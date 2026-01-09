@@ -1,6 +1,10 @@
 const { createServer } = require('http')
 const { Server } = require('socket.io')
 const next = require('next')
+
+// Load environment variables from .env file
+require('dotenv').config()
+
 const { verifyToken } = require('./lib/jwt')
 const { query } = require('./lib/db')
 
@@ -28,83 +32,152 @@ app.prepare().then(() => {
       }
     }
     
-    // Parse comma-separated origins
-    return allowedOrigins.split(',').map(origin => origin.trim()).filter(Boolean)
+    // Parse comma-separated origins and always include localhost in development
+    const origins = allowedOrigins.split(',').map(origin => origin.trim()).filter(Boolean)
+    
+    // Always allow localhost in development
+    if (dev) {
+      if (!origins.includes('http://localhost:3000')) {
+        origins.push('http://localhost:3000')
+      }
+      if (!origins.includes('http://127.0.0.1:3000')) {
+        origins.push('http://127.0.0.1:3000')
+      }
+    }
+    
+    return origins
   }
   
   // Origin validation function
   const validateOrigin = (origin, callback) => {
     const allowedOrigins = getAllowedOrigins()
     
+    console.log(`Socket.IO CORS check - Origin: ${origin}, Allowed: [${allowedOrigins.join(', ')}], Dev mode: ${dev}`)
+    
     // Allow requests with no origin (mobile apps, server-to-server)
     if (!origin) {
+      console.log('Socket.IO: Allowing request with no origin')
       return callback(null, true)
     }
     
     // Check if origin is in allowed list
     if (allowedOrigins.includes(origin)) {
+      console.log(`Socket.IO: Allowing origin ${origin}`)
       return callback(null, true)
     }
     
     console.warn(`Socket.IO connection rejected from unauthorized origin: ${origin}`)
+    console.warn(`Allowed origins: [${allowedOrigins.join(', ')}]`)
     return callback(new Error('Origin not allowed by CORS policy'), false)
   }
   
   const io = new Server(httpServer, {
     cors: {
-      origin: validateOrigin,
+      origin: dev ? true : validateOrigin, // Allow all origins in development
       methods: ["GET", "POST"],
       credentials: true
     }
   })
 
-  // Authentication middleware
+  // Make io instance available globally for API routes
+  global.io = io
+
+  // Flexible Authentication middleware - supports both authenticated and anonymous users
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '')
       
       if (!token) {
-        return next(new Error('Authentication token required'))
+        // Allow anonymous users for public tracking
+        socket.user = {
+          id: 'anonymous',
+          name: 'Anonymous User',
+          email: 'anonymous@tracking.com',
+          role: 'ANONYMOUS'
+        }
+        console.log(`Socket connected (anonymous): ${socket.id}`)
+        return next()
       }
 
-      // Import auth verification (assuming we have a verifyToken function)
-      
-      // Verify JWT token
-      const decoded = await verifyToken(token)
-      if (!decoded) {
-        return next(new Error('Invalid authentication token'))
+      try {
+        // Verify JWT token for authenticated users
+        const decoded = await verifyToken(token)
+        if (!decoded) {
+          // Invalid token - fallback to anonymous
+          socket.user = {
+            id: 'anonymous',
+            name: 'Anonymous User',
+            email: 'anonymous@tracking.com',
+            role: 'ANONYMOUS'
+          }
+          console.log(`Socket connected (anonymous - invalid token): ${socket.id}`)
+          return next()
+        }
+
+        // Get user from database to ensure they're still active
+        const result = await query(
+          'SELECT id, name, email, role, is_active FROM users WHERE id = $1',
+          [decoded.id]
+        )
+
+        if (result.rows.length === 0 || !result.rows[0].is_active) {
+          // User not found or inactive - fallback to anonymous
+          socket.user = {
+            id: 'anonymous',
+            name: 'Anonymous User',
+            email: 'anonymous@tracking.com',
+            role: 'ANONYMOUS'
+          }
+          console.log(`Socket connected (anonymous - user not found): ${socket.id}`)
+          return next()
+        }
+
+        const user = result.rows[0]
+        
+        // Verify role matches token
+        if (user.role !== decoded.role) {
+          // Role mismatch - fallback to anonymous
+          socket.user = {
+            id: 'anonymous',
+            name: 'Anonymous User',
+            email: 'anonymous@tracking.com',
+            role: 'ANONYMOUS'
+          }
+          console.log(`Socket connected (anonymous - role mismatch): ${socket.id}`)
+          return next()
+        }
+
+        // Attach authenticated user to socket
+        socket.user = {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role
+        }
+
+        console.log(`Socket authenticated: ${user.name} (${user.role}) - ${socket.id}`)
+        next()
+      } catch (error) {
+        // Token verification failed - fallback to anonymous
+        console.log(`Socket authentication failed, using anonymous: ${error.message}`)
+        socket.user = {
+          id: 'anonymous',
+          name: 'Anonymous User',
+          email: 'anonymous@tracking.com',
+          role: 'ANONYMOUS'
+        }
+        next()
       }
-
-      // Get user from database to ensure they're still active
-      const result = await query(
-        'SELECT id, name, email, role, is_active FROM users WHERE id = $1',
-        [decoded.id]
-      )
-
-      if (result.rows.length === 0 || !result.rows[0].is_active) {
-        return next(new Error('User not found or inactive'))
-      }
-
-      const user = result.rows[0]
-      
-      // Verify role matches token
-      if (user.role !== decoded.role) {
-        return next(new Error('Token role mismatch'))
-      }
-
-      // Attach user to socket
-      socket.user = {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
-
-      console.log(`Socket authenticated: ${user.name} (${user.role}) - ${socket.id}`)
-      next()
     } catch (error) {
       console.error('Socket authentication error:', error)
-      next(new Error('Authentication failed'))
+      // Even on error, allow anonymous access
+      socket.user = {
+        id: 'anonymous',
+        name: 'Anonymous User',
+        email: 'anonymous@tracking.com',
+        role: 'ANONYMOUS'
+      }
+      next()
     }
   })
 
@@ -117,9 +190,32 @@ app.prepare().then(() => {
         return true
       }
       
+      // Anonymous users can only track shipments (read-only access)
+      if (userRole === 'ANONYMOUS') {
+        // Check if shipment exists (anonymous users can track any existing shipment)
+        // Handle both UUID and tracking number safely
+        const result = await query(
+          `SELECT id FROM shipments 
+           WHERE (
+             (CASE WHEN $1 ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' 
+              THEN id = $1::uuid 
+              ELSE false END) 
+             OR tracking_number = $1
+           ) AND deleted_at IS NULL`,
+          [shipmentId]
+        )
+        return result.rows.length > 0
+      }
+      
       // Check if user owns the shipment or is assigned as driver
       const result = await query(
-        'SELECT user_id, driver_id FROM shipments WHERE id = $1 OR tracking_number = $1',
+        `SELECT user_id, driver_id FROM shipments 
+         WHERE (
+           (CASE WHEN $1 ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' 
+            THEN id = $1::uuid 
+            ELSE false END) 
+           OR tracking_number = $1
+         ) AND deleted_at IS NULL`,
         [shipmentId]
       )
       
@@ -327,8 +423,8 @@ app.prepare().then(() => {
       }
     })
 
-    // Auto-join admin room for admin users
-    if (socket.user.role === 'ADMIN') {
+    // Auto-join admin room for admin users (not anonymous)
+    if (socket.user.role === 'ADMIN' && socket.user.id !== 'anonymous') {
       socket.join('admin-room')
       console.log(`Admin ${socket.user.name} joined admin room`)
     }
@@ -340,11 +436,13 @@ app.prepare().then(() => {
 
   httpServer
     .once('error', (err) => {
-      console.error(err)
+      console.error('Server error:', err)
       process.exit(1)
     })
     .listen(port, () => {
       console.log(`> Ready on http://${hostname}:${port}`)
       console.log('> Socket.IO server is running')
+      console.log(`> Development mode: ${dev}`)
+      console.log(`> Socket.IO CORS origins: ${getAllowedOrigins().join(', ')}`)
     })
 })

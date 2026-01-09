@@ -35,7 +35,10 @@ CREATE TABLE addresses (
   longitude DECIMAL(11, 8),
   is_default BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  
+  -- Unique constraint to prevent duplicate addresses for the same user
+  CONSTRAINT addresses_user_composite_unique UNIQUE (user_id, street, city, state, country, postal_code)
 );
 
 -- Shipments table
@@ -125,6 +128,7 @@ CREATE INDEX idx_shipments_tracking_number ON shipments(tracking_number);
 CREATE INDEX idx_shipments_status ON shipments(status);
 CREATE INDEX idx_shipments_driver_id ON shipments(driver_id);
 CREATE INDEX idx_addresses_user_id ON addresses(user_id);
+CREATE INDEX idx_addresses_composite_unique ON addresses (user_id, street, city, state, country, postal_code);
 CREATE INDEX idx_tracking_checkpoints_shipment_id ON tracking_checkpoints(shipment_id);
 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX idx_notifications_is_read ON notifications(is_read);

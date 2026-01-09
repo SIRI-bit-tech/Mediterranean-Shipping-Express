@@ -16,6 +16,7 @@ interface DriverLocation {
 interface ShipmentUpdate {
   shipmentId: string
   status: string
+  transportMode?: string
   location?: {
     latitude: number
     longitude: number
@@ -57,20 +58,43 @@ class SocketService {
 
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000'
     
-    this.socket = io(socketUrl, {
+    // Try to get auth token from localStorage (if user is logged in)
+    let authToken = null
+    try {
+      authToken = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token')
+    } catch (error) {
+      // Ignore localStorage errors (e.g., in incognito mode)
+    }
+    
+    const socketOptions: any = {
       transports: ['websocket', 'polling'],
       upgrade: true,
       rememberUpgrade: true,
       timeout: 10000, // 10 second timeout
       reconnection: true, // Enable auto-reconnection
-      reconnectionAttempts: 2, // Retry 2 times
-      reconnectionDelay: 3000, // 3 seconds between retries
+      reconnectionAttempts: 3, // Retry 3 times
+      reconnectionDelay: 2000, // 2 seconds between retries
       autoConnect: true, // Auto-connect
-    })
+      forceNew: false, // Reuse existing connection
+    }
+    
+    // Add auth token if available (for authenticated users)
+    if (authToken) {
+      socketOptions.auth = {
+        token: authToken
+      }
+    }
+    // If no token, socket will connect as anonymous user
+    
+    this.socket = io(socketUrl, socketOptions)
 
     this.socket.on('connect', () => {
       console.log('Socket.IO connected:', this.socket?.id)
       this.isConnected = true
+      
+      // Log connection type
+      const connectionInfo = this.getConnectionInfo()
+      console.log(`Connected as: ${connectionInfo.userType} user`)
     })
 
     this.socket.on('disconnect', (reason) => {
@@ -301,6 +325,28 @@ class SocketService {
     // Return unsubscribe function
     return () => {
       this.socket?.off('admin-activity-broadcast', callback)
+    }
+  }
+
+  /**
+   * Get connection status and user type
+   */
+  getConnectionInfo(): { connected: boolean; userType: 'authenticated' | 'anonymous' | 'disconnected' } {
+    if (!this.socket || !this.isConnected) {
+      return { connected: false, userType: 'disconnected' }
+    }
+    
+    // Check if we have an auth token
+    let hasToken = false
+    try {
+      hasToken = !!(localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token'))
+    } catch (error) {
+      // Ignore localStorage errors
+    }
+    
+    return { 
+      connected: true, 
+      userType: hasToken ? 'authenticated' : 'anonymous' 
     }
   }
 

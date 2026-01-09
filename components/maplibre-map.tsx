@@ -26,6 +26,7 @@ interface MapLibreMapProps {
     latitude: number
     longitude: number
   }
+  transportMode?: 'AIR' | 'LAND' | 'WATER' | 'MULTIMODAL'
   showRoute?: boolean
   onRouteCalculated?: (route: RouteResult) => void
   className?: string
@@ -37,6 +38,7 @@ export function MapLibreMap({
   originLocation,
   destinationLocation,
   driverLocation,
+  transportMode = 'LAND',
   showRoute = true,
   onRouteCalculated,
   className = "w-full h-full rounded-lg overflow-hidden",
@@ -142,13 +144,16 @@ export function MapLibreMap({
     markersRef.current.forEach(marker => marker.remove())
     markersRef.current = []
 
-    // Create custom marker elements
-    const createMarkerElement = (color: string, label: string) => {
+    // Create custom marker elements with transport mode icons and animations
+    const createMarkerElement = (color: string, label: string, isActive = false, transportIcon?: string) => {
       const el = document.createElement('div')
-      el.className = 'custom-marker'
+      el.className = `custom-marker ${isActive ? 'active-marker' : ''}`
+      
+      const icon = transportIcon || label
+      
       el.style.cssText = `
-        width: 30px;
-        height: 30px;
+        width: 40px;
+        height: 40px;
         border-radius: 50%;
         background-color: ${color};
         border: 3px solid white;
@@ -158,17 +163,57 @@ export function MapLibreMap({
         align-items: center;
         justify-content: center;
         font-weight: bold;
-        font-size: 12px;
+        font-size: ${transportIcon ? '18px' : '12px'};
         color: white;
+        transition: all 0.3s ease;
+        position: relative;
+        ${isActive ? `
+          animation: pulse 2s infinite;
+          box-shadow: 0 0 0 0 ${color}40;
+        ` : ''}
       `
-      el.textContent = label
+      
+      // Add pulsing animation for active markers
+      if (isActive) {
+        const style = document.createElement('style')
+        style.textContent = `
+          @keyframes pulse {
+            0% {
+              box-shadow: 0 0 0 0 ${color}70;
+            }
+            70% {
+              box-shadow: 0 0 0 20px ${color}00;
+            }
+            100% {
+              box-shadow: 0 0 0 0 ${color}00;
+            }
+          }
+          .active-marker:hover {
+            transform: scale(1.1);
+          }
+        `
+        document.head.appendChild(style)
+      }
+      
+      el.textContent = icon
       return el
+    }
+
+    // Get transport mode icon
+    const getTransportIcon = (mode: string) => {
+      switch (mode) {
+        case 'AIR': return '✈️'
+        case 'LAND': return '🚛'
+        case 'WATER': return '🚢'
+        case 'MULTIMODAL': return '📦'
+        default: return '🚛'
+      }
     }
 
     // Add origin marker
     if (originLocation) {
       const originMarker = new maplibregl.Marker({
-        element: createMarkerElement('#10B981', 'O'),
+        element: createMarkerElement('#10B981', 'O', false),
         anchor: 'center'
       })
         .setLngLat([originLocation.longitude, originLocation.latitude])
@@ -182,16 +227,17 @@ export function MapLibreMap({
       markersRef.current.push(originMarker)
     }
 
-    // Add current shipment location marker
+    // Add current shipment location marker with transport mode icon and pulsing animation
     if (shipmentLocation) {
+      const transportIcon = getTransportIcon(transportMode)
       const shipmentMarker = new maplibregl.Marker({
-        element: createMarkerElement('#FFB700', 'S'),
+        element: createMarkerElement('#FFB700', 'S', true, transportIcon),
         anchor: 'center'
       })
         .setLngLat([shipmentLocation.longitude, shipmentLocation.latitude])
         .setPopup(
           new maplibregl.Popup({ offset: 25 }).setHTML(
-            `<div><strong>Current Location</strong><br/>${shipmentLocation.city}, ${shipmentLocation.country}</div>`
+            `<div><strong>Current Location</strong><br/>${shipmentLocation.city}, ${shipmentLocation.country}<br/><em>Transport: ${transportMode}</em></div>`
           )
         )
         .addTo(map.current)
@@ -202,7 +248,7 @@ export function MapLibreMap({
     // Add destination marker
     if (destinationLocation) {
       const destMarker = new maplibregl.Marker({
-        element: createMarkerElement('#3B82F6', 'D'),
+        element: createMarkerElement('#3B82F6', 'D', false),
         anchor: 'center'
       })
         .setLngLat([destinationLocation.longitude, destinationLocation.latitude])
@@ -219,13 +265,13 @@ export function MapLibreMap({
     // Add driver location marker
     if (driverLocation) {
       const driverMarker = new maplibregl.Marker({
-        element: createMarkerElement('#EF4444', 'D'),
+        element: createMarkerElement('#EF4444', '👤', true),
         anchor: 'center'
       })
         .setLngLat([driverLocation.longitude, driverLocation.latitude])
         .setPopup(
           new maplibregl.Popup({ offset: 25 }).setHTML(
-            '<div><strong>Driver Location</strong></div>'
+            '<div><strong>Driver Location</strong><br/>Live tracking</div>'
           )
         )
         .addTo(map.current)
@@ -241,7 +287,167 @@ export function MapLibreMap({
       })
       map.current.fitBounds(bounds, { padding: 50 })
     }
-  }, [isLoaded, originLocation, shipmentLocation, destinationLocation, driverLocation])
+  }, [isLoaded, originLocation, shipmentLocation, destinationLocation, driverLocation, transportMode])
+
+  // Add journey progress and connecting lines visualization
+  useEffect(() => {
+    if (!map.current || !isLoaded) return
+
+    const progressSourceId = 'progress-source'
+    const progressLayerId = 'progress-layer'
+    const connectionSourceId = 'connection-source'
+    const connectionLayerId = 'connection-layer'
+
+    // Remove existing lines - must remove layers before sources
+    const layersToRemove = [
+      progressLayerId,
+      connectionLayerId + '-full',
+      connectionLayerId + '-remaining', 
+      connectionLayerId + '-completed',
+      connectionLayerId
+    ]
+    
+    const sourcesToRemove = [
+      progressSourceId,
+      connectionSourceId
+    ]
+
+    try {
+      // Remove layers first
+      layersToRemove.forEach(layerId => {
+        if (map.current?.getLayer(layerId)) {
+          map.current.removeLayer(layerId)
+        }
+      })
+
+      // Then remove sources
+      sourcesToRemove.forEach(sourceId => {
+        if (map.current?.getSource(sourceId)) {
+          map.current.removeSource(sourceId)
+        }
+      })
+    } catch (error) {
+      console.warn('Error removing map layers/sources:', error)
+      // Continue execution - don't let map errors break the component
+    }
+
+    // Create connecting lines between all points
+    const lines = []
+
+    // Origin to Current (completed journey - thick orange line)
+    if (originLocation && shipmentLocation) {
+      lines.push({
+        type: 'Feature' as const,
+        properties: { type: 'completed' },
+        geometry: {
+          type: 'LineString' as const,
+          coordinates: [
+            [originLocation.longitude, originLocation.latitude],
+            [shipmentLocation.longitude, shipmentLocation.latitude]
+          ]
+        }
+      })
+    }
+
+    // Current to Destination (remaining journey - dashed gray line)
+    if (shipmentLocation && destinationLocation) {
+      lines.push({
+        type: 'Feature' as const,
+        properties: { type: 'remaining' },
+        geometry: {
+          type: 'LineString' as const,
+          coordinates: [
+            [shipmentLocation.longitude, shipmentLocation.latitude],
+            [destinationLocation.longitude, destinationLocation.latitude]
+          ]
+        }
+      })
+    }
+
+    // Direct Origin to Destination (full route - thin gray line)
+    if (originLocation && destinationLocation) {
+      lines.push({
+        type: 'Feature' as const,
+        properties: { type: 'full-route' },
+        geometry: {
+          type: 'LineString' as const,
+          coordinates: [
+            [originLocation.longitude, originLocation.latitude],
+            [destinationLocation.longitude, destinationLocation.latitude]
+          ]
+        }
+      })
+    }
+
+    if (lines.length > 0) {
+      try {
+        // Add connection lines source
+        map.current.addSource(connectionSourceId, {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: lines
+          }
+        })
+
+        // Add full route layer (background)
+        map.current.addLayer({
+          id: connectionLayerId + '-full',
+          type: 'line',
+          source: connectionSourceId,
+          filter: ['==', ['get', 'type'], 'full-route'],
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#D1D5DB',
+            'line-width': 2,
+            'line-opacity': 0.5
+          }
+        })
+
+        // Add remaining journey layer
+        map.current.addLayer({
+          id: connectionLayerId + '-remaining',
+          type: 'line',
+          source: connectionSourceId,
+          filter: ['==', ['get', 'type'], 'remaining'],
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#9CA3AF',
+            'line-width': 3,
+            'line-opacity': 0.7,
+            'line-dasharray': [2, 2]
+          }
+        })
+
+        // Add completed journey layer (on top)
+        map.current.addLayer({
+          id: connectionLayerId + '-completed',
+          type: 'line',
+          source: connectionSourceId,
+          filter: ['==', ['get', 'type'], 'completed'],
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#FFB700',
+            'line-width': 4,
+            'line-opacity': 0.9
+          }
+        })
+      } catch (error) {
+        console.warn('Error adding map layers:', error)
+        // Continue execution - don't let map errors break the component
+      }
+    }
+
+  }, [isLoaded, originLocation, shipmentLocation, destinationLocation])
 
   // Calculate and display route
   useEffect(() => {
