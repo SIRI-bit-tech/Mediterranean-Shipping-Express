@@ -7,7 +7,7 @@
     "build": "next build",
     "db:migrate": "node scripts/migrate.js",
     "db:migrate:single": "node scripts/run-migration.js",
-    "db:schema": "node scripts/schema.sql",
+    "db:schema": "node scripts/run-schema.js",
     "dev": "cross-env NODE_ENV=development node server.js",
     "dev:next": "next dev",
     "lint": "eslint .",

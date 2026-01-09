@@ -39,6 +39,7 @@ export function ShipForm() {
     city: "",
     state: "",
     zipCode: "",
+    originAddressLabel: "shipping",
     recipientName: "",
     recipientEmail: "",
     recipientPhone: "",
@@ -48,6 +49,7 @@ export function ShipForm() {
     recipientCity: "",
     recipientState: "",
     recipientZip: "",
+    destinationAddressLabel: "shipping",
     packageWeight: "",
     packageLength: "",
     packageWidth: "",
@@ -144,6 +146,7 @@ export function ShipForm() {
           city: formData.city,
           state: formData.state,
           zipCode: formData.zipCode,
+          label: formData.originAddressLabel,
           contactName: formData.contactName,
           companyName: formData.companyName,
           phone: formData.phoneNumber,
@@ -155,6 +158,7 @@ export function ShipForm() {
           city: formData.recipientCity,
           state: formData.recipientState,
           zipCode: formData.recipientZip,
+          label: formData.destinationAddressLabel,
           contactName: formData.recipientName,
           companyName: formData.recipientCompany,
           phone: formData.recipientPhone,
@@ -183,7 +187,13 @@ export function ShipForm() {
       } else {
         const errorData = await response.json()
         console.error('Shipment creation failed:', errorData)
-        setErrorMessage(errorData.error || errorData.message || "Failed to create shipment. Please try again.")
+        
+        // Handle specific error types
+        if (errorData.type === 'address_conflict') {
+          setErrorMessage(`${errorData.error} Please try using a different address label or modify the address details.`)
+        } else {
+          setErrorMessage(errorData.error || errorData.message || "Failed to create shipment. Please try again.")
+        }
         setIsSubmitting(false)
       }
     } catch (error) {
@@ -329,11 +339,27 @@ export function ShipForm() {
                   />
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 mb-4">
                   <Checkbox id="save-address" />
                   <label htmlFor="save-address" className="text-sm text-gray-600">
                     Save this address to my address book
                   </label>
+                </div>
+
+                <div className="mb-4">
+                  <Label className="text-black font-semibold mb-2 block text-sm">Address Label</Label>
+                  <select
+                    name="originAddressLabel"
+                    value={formData.originAddressLabel || 'shipping'}
+                    onChange={handleSelectChange}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-yellow-500 bg-gray-50 text-black"
+                  >
+                    <option value="home">Home</option>
+                    <option value="work">Work</option>
+                    <option value="billing">Billing</option>
+                    <option value="shipping">Shipping</option>
+                    <option value="other">Other</option>
+                  </select>
                 </div>
               </div>
 
@@ -432,6 +458,22 @@ export function ShipForm() {
                   onChange={handleInputChange}
                   className="bg-gray-50 border-gray-200"
                 />
+              </div>
+
+              <div>
+                <Label className="text-black font-semibold mb-2 block text-sm">Address Label</Label>
+                <select
+                  name="destinationAddressLabel"
+                  value={formData.destinationAddressLabel || 'shipping'}
+                  onChange={handleSelectChange}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-yellow-500 bg-gray-50 text-black"
+                >
+                  <option value="home">Home</option>
+                  <option value="work">Work</option>
+                  <option value="billing">Billing</option>
+                  <option value="shipping">Shipping</option>
+                  <option value="other">Other</option>
+                </select>
               </div>
 
               <div className="flex gap-4">

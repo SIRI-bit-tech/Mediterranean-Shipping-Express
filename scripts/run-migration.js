@@ -66,25 +66,74 @@ const getDatabaseConfig = () => {
 
 const pool = new Pool(getDatabaseConfig())
 
+// Ensure migrations table exists
+async function ensureMigrationsTable(client) {
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS migrations (
+        id SERIAL PRIMARY KEY,
+        filename VARCHAR(255) UNIQUE NOT NULL,
+        executed_at TIMESTAMP DEFAULT NOW()
+      )
+    `)
+  } catch (error) {
+    console.error('Failed to create migrations table:', error.message)
+    throw error
+  }
+}
+
 async function runMigration(migrationFile) {
   const client = await pool.connect()
   
   try {
+    // Ensure migrations table exists
+    await ensureMigrationsTable(client)
+    
+    // Check if migration has already been executed
+    const existingMigration = await client.query(
+      'SELECT filename FROM migrations WHERE filename = $1',
+      [migrationFile]
+    )
+    
+    if (existingMigration.rows.length > 0) {
+      console.log(`⏭️  Migration already executed: ${migrationFile}`)
+      return false // Indicate migration was not executed (already done)
+    }
+    
     console.log(`Running migration: ${migrationFile}`)
     
     // Read the migration file
     const migrationPath = path.join(__dirname, 'migrations', migrationFile)
+    
+    if (!fs.existsSync(migrationPath)) {
+      throw new Error(`Migration file not found: ${migrationPath}`)
+    }
+    
     const migrationSQL = fs.readFileSync(migrationPath, 'utf8')
     
-    // Execute the migration
+    // Execute the migration in a transaction
     await client.query('BEGIN')
-    await client.query(migrationSQL)
-    await client.query('COMMIT')
     
-    console.log(`✅ Migration completed: ${migrationFile}`)
+    try {
+      // Execute the migration SQL
+      await client.query(migrationSQL)
+      
+      // Record the migration as executed
+      await client.query(
+        'INSERT INTO migrations (filename) VALUES ($1)',
+        [migrationFile]
+      )
+      
+      await client.query('COMMIT')
+      console.log(`✅ Migration completed: ${migrationFile}`)
+      return true // Indicate migration was executed successfully
+      
+    } catch (migrationError) {
+      await client.query('ROLLBACK')
+      throw migrationError
+    }
     
   } catch (error) {
-    await client.query('ROLLBACK')
     console.error(`❌ Migration failed: ${migrationFile}`)
     console.error('Error:', error.message)
     throw error
@@ -105,13 +154,18 @@ async function main() {
     
     // Test database connection first
     console.log('Testing database connection...')
-    const client = await pool.connect()
-    await client.query('SELECT 1')
-    client.release()
+    const testClient = await pool.connect()
+    await testClient.query('SELECT 1')
+    testClient.release()
     console.log('✅ Database connection successful')
     
-    await runMigration(migrationFile)
-    console.log('🎉 Migration completed successfully!')
+    const wasExecuted = await runMigration(migrationFile)
+    
+    if (wasExecuted) {
+      console.log('🎉 Migration completed successfully!')
+    } else {
+      console.log('✅ Migration was already executed!')
+    }
     
   } catch (error) {
     console.error('Migration failed:', error.message)
@@ -126,4 +180,9 @@ if (require.main === module) {
   main()
 }
 
-module.exports = { runMigration }
+// Function to close the pool connection (for use by migrate.js)
+async function closePool() {
+  await pool.end()
+}
+
+module.exports = { runMigration, closePool }

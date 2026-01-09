@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { query } from "@/lib/db"
+import { pool, query } from "@/lib/db"
 import { requireAdminAuth } from "@/lib/auth"
 
 export async function PUT(
@@ -22,133 +22,162 @@ export async function PUT(
       return NextResponse.json({ error: "Invalid action" }, { status: 400 })
     }
 
-    // Get current request
-    const requestResult = await query(
-      `SELECT pr.*, s.tracking_number, s.user_id, s.status as shipment_status
-       FROM package_requests pr
-       JOIN shipments s ON pr.shipment_id = s.id
-       WHERE pr.id = $1`,
-      [requestId]
-    )
-
-    if (requestResult.rows.length === 0) {
-      return NextResponse.json({ error: "Package request not found" }, { status: 404 })
-    }
-
-    const packageRequest = requestResult.rows[0]
-    const oldStatus = packageRequest.status
-
-    // Determine new status based on action
-    let newStatus = packageRequest.status
+    // Start database transaction
+    const client = await pool.connect()
+    let updatedRequest: any
+    let packageRequest: any
+    let oldStatus: string
+    let newStatus: string
     let shipmentUpdates: any = {}
+    
+    try {
+      await client.query('BEGIN')
 
-    switch (action) {
-      case 'APPROVE':
-        if (packageRequest.status !== 'PENDING') {
-          return NextResponse.json({ error: "Can only approve pending requests" }, { status: 400 })
-        }
-        newStatus = 'APPROVED'
-        
-        // Apply the request to the shipment
-        switch (packageRequest.request_type) {
-          case 'HOLD':
-            shipmentUpdates.status = 'ON_HOLD'
-            shipmentUpdates.on_hold_reason = packageRequest.reason || 'Customer requested hold'
-            break
-          case 'REDIRECT':
-            const redirectData = JSON.parse(packageRequest.request_data)
-            if (redirectData.newAddress) {
-              // In a real system, you'd create a new address record
-              shipmentUpdates.current_location = redirectData.newAddress
-            }
-            break
-          case 'RETURN':
-            shipmentUpdates.status = 'RETURNING'
-            break
-          case 'RESCHEDULE':
-            const rescheduleData = JSON.parse(packageRequest.request_data)
-            if (rescheduleData.newDeliveryDate) {
-              shipmentUpdates.estimated_delivery_date = rescheduleData.newDeliveryDate
-            }
-            break
-          case 'INTERCEPT':
-            // Stop current delivery and put on hold for new instructions
-            shipmentUpdates.status = 'ON_HOLD'
-            shipmentUpdates.on_hold_reason = `Delivery intercepted: ${packageRequest.reason || 'Customer request'}`
-            break
-        }
-        break
-
-      case 'REJECT':
-        if (packageRequest.status !== 'PENDING') {
-          return NextResponse.json({ error: "Can only reject pending requests" }, { status: 400 })
-        }
-        newStatus = 'REJECTED'
-        break
-
-      case 'COMPLETE':
-        if (packageRequest.status !== 'APPROVED') {
-          return NextResponse.json({ error: "Can only complete approved requests" }, { status: 400 })
-        }
-        newStatus = 'COMPLETED'
-        break
-
-      case 'CANCEL':
-        if (!['PENDING', 'APPROVED'].includes(packageRequest.status)) {
-          return NextResponse.json({ error: "Cannot cancel completed or rejected requests" }, { status: 400 })
-        }
-        newStatus = 'CANCELLED'
-        break
-    }
-
-    // Update package request
-    const updateResult = await query(
-      `UPDATE package_requests 
-       SET status = $1, admin_notes = $2, approved_by = $3, approved_at = NOW(), updated_at = NOW()
-       WHERE id = $4
-       RETURNING *`,
-      [newStatus, adminNotes, admin.id, requestId]
-    )
-
-    const updatedRequest = updateResult.rows[0]
-
-    // Update shipment if needed
-    if (Object.keys(shipmentUpdates).length > 0) {
-      const updateFields = Object.keys(shipmentUpdates).map((key, index) => `${key} = $${index + 2}`).join(', ')
-      const updateValues = [packageRequest.shipment_id, ...Object.values(shipmentUpdates)]
-      
-      await query(
-        `UPDATE shipments SET ${updateFields}, updated_at = NOW() WHERE id = $1`,
-        updateValues
+      // Get current request
+      const requestResult = await client.query(
+        `SELECT pr.*, s.tracking_number, s.user_id, s.status as shipment_status
+         FROM package_requests pr
+         JOIN shipments s ON pr.shipment_id = s.id
+         WHERE pr.id = $1`,
+        [requestId]
       )
 
-      // Create tracking checkpoint
-      await query(
-        `INSERT INTO tracking_checkpoints (shipment_id, status, location, timestamp, notes, created_at)
-         VALUES ($1, $2, $3, NOW(), $4, NOW())`,
+      if (requestResult.rows.length === 0) {
+        await client.query('ROLLBACK')
+        return NextResponse.json({ error: "Package request not found" }, { status: 404 })
+      }
+
+      packageRequest = requestResult.rows[0]
+      oldStatus = packageRequest.status
+
+      // Determine new status based on action
+      newStatus = packageRequest.status
+
+      switch (action) {
+        case 'APPROVE':
+          if (packageRequest.status !== 'PENDING') {
+            await client.query('ROLLBACK')
+            return NextResponse.json({ error: "Can only approve pending requests" }, { status: 400 })
+          }
+          newStatus = 'APPROVED'
+          
+          // Apply the request to the shipment
+          switch (packageRequest.request_type) {
+            case 'HOLD':
+              shipmentUpdates.status = 'ON_HOLD'
+              shipmentUpdates.on_hold_reason = packageRequest.reason || 'Customer requested hold'
+              break
+            case 'REDIRECT': {
+              const redirectData = JSON.parse(packageRequest.request_data)
+              if (redirectData.newAddress) {
+                // In a real system, you'd create a new address record
+                shipmentUpdates.current_location = redirectData.newAddress
+              }
+              break
+            }
+            case 'RETURN':
+              shipmentUpdates.status = 'RETURNING'
+              break
+            case 'RESCHEDULE': {
+              const rescheduleData = JSON.parse(packageRequest.request_data)
+              if (rescheduleData.newDeliveryDate) {
+                shipmentUpdates.estimated_delivery_date = rescheduleData.newDeliveryDate
+              }
+              break
+            }
+            case 'INTERCEPT':
+              // Stop current delivery and put on hold for new instructions
+              shipmentUpdates.status = 'ON_HOLD'
+              shipmentUpdates.on_hold_reason = `Delivery intercepted: ${packageRequest.reason || 'Customer request'}`
+              break
+          }
+          break
+
+        case 'REJECT':
+          if (packageRequest.status !== 'PENDING') {
+            await client.query('ROLLBACK')
+            return NextResponse.json({ error: "Can only reject pending requests" }, { status: 400 })
+          }
+          newStatus = 'REJECTED'
+          break
+
+        case 'COMPLETE':
+          if (packageRequest.status !== 'APPROVED') {
+            await client.query('ROLLBACK')
+            return NextResponse.json({ error: "Can only complete approved requests" }, { status: 400 })
+          }
+          newStatus = 'COMPLETED'
+          break
+
+        case 'CANCEL':
+          if (!['PENDING', 'APPROVED'].includes(packageRequest.status)) {
+            await client.query('ROLLBACK')
+            return NextResponse.json({ error: "Cannot cancel completed or rejected requests" }, { status: 400 })
+          }
+          newStatus = 'CANCELLED'
+          break
+      }
+
+      // Update package request
+      const updateResult = await client.query(
+        `UPDATE package_requests 
+         SET status = $1, admin_notes = $2, approved_by = $3, approved_at = NOW(), updated_at = NOW()
+         WHERE id = $4
+         RETURNING *`,
+        [newStatus, adminNotes, admin.id, requestId]
+      )
+
+      updatedRequest = updateResult.rows[0]
+
+      // Update shipment if needed
+      if (Object.keys(shipmentUpdates).length > 0) {
+        const updateFields = Object.keys(shipmentUpdates).map((key, index) => `${key} = $${index + 2}`).join(', ')
+        const updateValues = [packageRequest.shipment_id, ...Object.values(shipmentUpdates)]
+        
+        await client.query(
+          `UPDATE shipments SET ${updateFields}, updated_at = NOW() WHERE id = $1`,
+          updateValues
+        )
+
+        // Create tracking checkpoint
+        await client.query(
+          `INSERT INTO tracking_checkpoints (shipment_id, status, location, timestamp, notes, created_at)
+           VALUES ($1, $2, $3, NOW(), $4, NOW())`,
+          [
+            packageRequest.shipment_id,
+            shipmentUpdates.status || packageRequest.shipment_status,
+            shipmentUpdates.current_location || 'Admin Action',
+            `Package request ${action.toLowerCase()}ed: ${packageRequest.request_type}`
+          ]
+        )
+      }
+
+      // Create history entry
+      await client.query(
+        `INSERT INTO package_request_history 
+         (package_request_id, action, old_status, new_status, performed_by, notes)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
         [
-          packageRequest.shipment_id,
-          shipmentUpdates.status || packageRequest.shipment_status,
-          shipmentUpdates.current_location || 'Admin Action',
-          `Package request ${action.toLowerCase()}ed: ${packageRequest.request_type}`
+          requestId,
+          `REQUEST_${action}`,
+          oldStatus,
+          newStatus,
+          admin.id,
+          adminNotes || `Request ${action.toLowerCase()}ed by admin`
         ]
       )
-    }
 
-    // Create history entry
-    await query(
-      `INSERT INTO package_request_history 
-       (package_request_id, action, old_status, new_status, performed_by, notes)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        requestId,
-        `REQUEST_${action}`,
-        oldStatus,
-        newStatus,
-        admin.id,
-        adminNotes || `Request ${action.toLowerCase()}ed by admin`
-      ]
-    )
+      // Commit transaction
+      await client.query('COMMIT')
+      
+    } catch (error) {
+      // Rollback transaction on error
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      // Always release the client
+      client.release()
+    }
 
     // Emit Socket.IO event for real-time updates
     try {
@@ -208,6 +237,12 @@ export async function GET(
   { params }: { params: Promise<{ requestId: string }> }
 ) {
   try {
+    // Require authentication for accessing package request details
+    const user = await requireAdminAuth(request)
+    if (!user) {
+      return NextResponse.json({ error: "Admin access required" }, { status: 401 })
+    }
+
     const { requestId } = await params
 
     const result = await query(

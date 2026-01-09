@@ -33,22 +33,30 @@ interface PackageRequest {
 
 interface PackageRequestStatusProps {
   trackingNumber: string
+  verificationValue?: string // postal code or email for anonymous access
   className?: string
 }
 
-export function PackageRequestStatus({ trackingNumber, className = "" }: PackageRequestStatusProps) {
+export function PackageRequestStatus({ trackingNumber, verificationValue, className = "" }: PackageRequestStatusProps) {
   const [requests, setRequests] = useState<PackageRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
     loadRequests()
-  }, [trackingNumber])
+  }, [trackingNumber, verificationValue])
 
   const loadRequests = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/package-requests?trackingNumber=${trackingNumber}`)
+      
+      // Build query parameters
+      const params = new URLSearchParams({ trackingNumber })
+      if (verificationValue) {
+        params.append('verificationValue', verificationValue)
+      }
+      
+      const response = await fetch(`/api/package-requests?${params.toString()}`)
       
       if (response.ok) {
         const data = await response.json()
