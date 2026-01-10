@@ -4,27 +4,46 @@
 // This file is safe to import in client components
 
 let clientSocket: any = null
+let socketInitPromise: Promise<any> | null = null
 
-export function subscribeToShipment(trackingNumber: string) {
-  if (typeof window === 'undefined') return // Server-side guard
+// Initialize socket connection
+function initializeSocket() {
+  if (typeof window === 'undefined') return Promise.resolve(null)
   
-  // Import socket.io-client dynamically to avoid SSR issues
-  import('socket.io-client').then(({ io }) => {
+  if (socketInitPromise) return socketInitPromise
+  
+  socketInitPromise = import('socket.io-client').then(({ io }) => {
     if (!clientSocket) {
       const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin
       clientSocket = io(socketUrl)
     }
-    
-    clientSocket.emit('subscribe:shipment', { trackingNumber })
+    return clientSocket
   }).catch(() => {
     // Silently fail if socket.io-client is not available
+    return null
+  })
+  
+  return socketInitPromise
+}
+
+export function subscribeToShipment(trackingNumber: string) {
+  if (typeof window === 'undefined') return // Server-side guard
+  
+  initializeSocket().then(socket => {
+    if (socket) {
+      socket.emit('subscribe:shipment', { trackingNumber })
+    }
   })
 }
 
 export function unsubscribeFromShipment(trackingNumber: string) {
-  if (typeof window === 'undefined' || !clientSocket) return
+  if (typeof window === 'undefined') return
   
-  clientSocket.emit('unsubscribe:shipment', { trackingNumber })
+  initializeSocket().then(socket => {
+    if (socket) {
+      socket.emit('unsubscribe:shipment', { trackingNumber })
+    }
+  })
 }
 
 export function onTrackingUpdate(callback: (update: TrackingUpdate) => void) {
@@ -34,16 +53,19 @@ export function onTrackingUpdate(callback: (update: TrackingUpdate) => void) {
     callback(update)
   }
   
-  if (clientSocket) {
-    clientSocket.on('tracking:update', handleUpdate)
-    
-    return () => {
-      clientSocket.off('tracking:update', handleUpdate)
-    }
-  }
+  let unsubscribe = () => {}
   
-  // Return empty unsubscribe function if no socket
-  return () => {}
+  initializeSocket().then(socket => {
+    if (socket) {
+      socket.on('tracking:update', handleUpdate)
+      
+      unsubscribe = () => {
+        socket.off('tracking:update', handleUpdate)
+      }
+    }
+  })
+  
+  return () => unsubscribe()
 }
 
 export function onDriverLocationUpdate(callback: (location: DriverLocation) => void) {
@@ -53,14 +75,17 @@ export function onDriverLocationUpdate(callback: (location: DriverLocation) => v
     callback(location)
   }
   
-  if (clientSocket) {
-    clientSocket.on('driver:location', handleLocationUpdate)
-    
-    return () => {
-      clientSocket.off('driver:location', handleLocationUpdate)
-    }
-  }
+  let unsubscribe = () => {}
   
-  // Return empty unsubscribe function if no socket
-  return () => {}
+  initializeSocket().then(socket => {
+    if (socket) {
+      socket.on('driver:location', handleLocationUpdate)
+      
+      unsubscribe = () => {
+        socket.off('driver:location', handleLocationUpdate)
+      }
+    }
+  })
+  
+  return () => unsubscribe()
 }

@@ -55,29 +55,31 @@ interface DeliveryDetailPageProps {
   params: Promise<{ id: string }>
 }
 
-export default function DeliveryDetailPage({ params }: DeliveryDetailPageProps) {
-  const [id, setId] = useState<string | null>(null)
+export default async function DeliveryDetailPage({ params }: DeliveryDetailPageProps) {
+  const { id } = await params
   const [notes, setNotes] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [delivery, setDelivery] = useState<DeliveryData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Resolve params Promise
   useEffect(() => {
-    params.then(resolvedParams => {
-      setId(resolvedParams.id)
-    })
-  }, [params])
-
-  useEffect(() => {
-    if (id) {
-      fetchDeliveryDetails()
+    const loadDelivery = async () => {
+      try {
+        await fetchDeliveryDetails(id)
+      } catch (error) {
+        console.error('Error loading delivery:', error)
+        setError(error instanceof Error ? error.message : 'Failed to load delivery details')
+        setLoading(false)
+      }
     }
+    loadDelivery()
   }, [id])
 
-  const fetchDeliveryDetails = async () => {
-    if (!id) return
+  const fetchDeliveryDetails = async (deliveryId: string) => {
+    if (!deliveryId) {
+      throw new Error('Missing delivery id')
+    }
     
     try {
       const token = localStorage.getItem('token')
@@ -86,7 +88,7 @@ export default function DeliveryDetailPage({ params }: DeliveryDetailPageProps) 
         return
       }
 
-      const response = await fetch(`/api/driver/deliveries/${id}`, {
+      const response = await fetch(`/api/driver/deliveries/${deliveryId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

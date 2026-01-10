@@ -7,26 +7,7 @@ require('dotenv').config()
 
 const { verifyToken } = require('./lib/jwt')
 const { query } = require('./lib/db')
-
-// Simple server-side logger for production safety
-const logger = {
-  info: (message, context = {}) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[INFO] ${message}`, context)
-    }
-  },
-  warn: (message, context = {}) => {
-    console.warn(`[WARN] ${message}`, context)
-  },
-  error: (message, error = null, context = {}) => {
-    console.error(`[ERROR] ${message}`, { error: error?.message || error, ...context })
-  },
-  debug: (message, context = {}) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[DEBUG] ${message}`, context)
-    }
-  }
-}
+const { logger } = require('./lib/logger')
 
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = 'localhost'

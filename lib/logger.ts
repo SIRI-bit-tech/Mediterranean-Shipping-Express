@@ -69,7 +69,10 @@ class Logger {
     
     // Truncate user IDs for privacy
     if (sanitized.userId && sanitized.userId !== 'anonymous') {
-      sanitized.userId = sanitized.userId.substring(0, 8) + '...'
+      if (sanitized.userId.length > 8) {
+        sanitized.userId = sanitized.userId.substring(0, 8) + '...'
+      }
+      // If length <= 8, leave sanitized.userId unchanged
     }
     
     return sanitized

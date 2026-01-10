@@ -19,7 +19,7 @@ ALTER TABLE addresses
 ALTER COLUMN label SET NOT NULL;
 
 -- Add/update check constraint for label values (idempotent with updates)
-DO $$$
+DO $$$$
 BEGIN
   -- Drop existing constraint if it exists to allow updates
   IF EXISTS (
@@ -30,14 +30,14 @@ BEGIN
       AND t.relname = 'addresses'
       AND n.nspname = 'public'
   ) THEN
-    ALTER TABLE addresses DROP CONSTRAINT addresses_label_check;
+    ALTER TABLE public.addresses DROP CONSTRAINT addresses_label_check;
   END IF;
   
   -- Add constraint with current label set
-  ALTER TABLE addresses 
+  ALTER TABLE public.addresses 
   ADD CONSTRAINT addresses_label_check 
   CHECK (label IN ('home', 'work', 'billing', 'shipping', 'other'));
-END $$;
+END $$$;
 
 -- Update existing NULL values to empty strings for consistent uniqueness (idempotent)
 DO $$

@@ -4,7 +4,8 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { socketService, type DriverLocation, type ShipmentUpdate, type AdminUpdate } from '@/lib/socket-client'
+import { socketService, type ShipmentUpdate, type AdminUpdate } from '@/lib/socket-client'
+import type { DriverLocation } from '@/lib/types/global'
 
 interface UseRealTimeTrackingProps {
   shipmentId: string
@@ -161,7 +162,16 @@ export function useDriverLocationUpdater() {
     try {
       socketService.updateDriverLocation(location)
     } catch (error) {
-      // Failed to update driver location - handle silently
+      console.error('Failed to update driver location', {
+        error: error instanceof Error ? error.message : error,
+        driverId: location.driverId,
+        location: {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          timestamp: location.timestamp,
+          accuracy: location.accuracy
+        }
+      })
     } finally {
       setIsUpdating(false)
     }
@@ -193,13 +203,15 @@ export function useAdminDashboard() {
     let unsubscribeDrivers: (() => void) | null = null
 
     // Subscribe to all driver location updates (async)
-    socketService.subscribeToAllDrivers((location: DriverLocation) => {
+    const unsubscribePromise = socketService.subscribeToAllDrivers((location: DriverLocation) => {
       setDrivers(prev => {
         const updated = new Map(prev)
         updated.set(location.driverId, location)
         return updated
       })
-    }).then(unsubscribe => {
+    })
+
+    unsubscribePromise.then(unsubscribe => {
       unsubscribeDrivers = unsubscribe
     })
 
@@ -210,9 +222,19 @@ export function useAdminDashboard() {
 
     return () => {
       clearInterval(connectionInterval)
+      
+      // Handle async unsubscribe properly
       if (unsubscribeDrivers) {
         unsubscribeDrivers()
+      } else {
+        // If unsubscribeDrivers hasn't been set yet, wait for the promise
+        unsubscribePromise.then(unsubscribe => {
+          if (unsubscribe) {
+            unsubscribe()
+          }
+        })
       }
+      
       if (unsubscribeAdminActivities) {
         unsubscribeAdminActivities()
       }

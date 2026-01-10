@@ -10,7 +10,8 @@ interface DriverLocation {
   driverId: string
   latitude: number
   longitude: number
-  timestamp: string
+  timestamp: Date
+  accuracy?: number
   shipmentId?: string
 }
 
