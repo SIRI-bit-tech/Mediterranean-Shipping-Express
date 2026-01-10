@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
 import { requireAdminAuth } from "@/lib/auth"
+import { logger } from "@/lib/logger"
 
 export async function PUT(
   request: NextRequest,
@@ -211,7 +212,7 @@ export async function PUT(
         ]
       )
     } catch (trackingError) {
-      console.error('Error creating tracking checkpoint:', trackingError)
+      logger.error('Error creating tracking checkpoint', trackingError)
       // Don't block the response, just log the error
     }
 
@@ -229,7 +230,7 @@ export async function PUT(
         ]
       )
     } catch (notificationError) {
-      console.error('Error creating notification:', notificationError)
+      logger.error('Error creating notification', notificationError)
       // Don't block the response, just log the error
     }
 
@@ -272,10 +273,10 @@ export async function PUT(
         
         io.emit('admin-activity-broadcast', adminUpdate)
         
-        console.log(`[Socket.IO] Emitted shipment update for ${updatedShipment.tracking_number}`)
+        logger.debug('Emitted shipment update', { trackingNumber: updatedShipment.tracking_number })
       }
     } catch (socketError) {
-      console.error('Error emitting Socket.IO event:', socketError)
+      logger.error('Error emitting Socket.IO event', socketError)
       // Don't block the response, just log the error
     }
 
@@ -311,7 +312,7 @@ export async function PUT(
       }
     })
   } catch (error) {
-    console.error('Error updating shipment:', error)
+    logger.error('Error updating shipment', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -347,7 +348,7 @@ export async function DELETE(
       message: "Shipment deleted successfully",
     })
   } catch (error) {
-    console.error('Error deleting shipment:', error)
+    logger.error('Error deleting shipment', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

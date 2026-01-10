@@ -3,6 +3,7 @@ import { query, pool } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
 import { transformShipmentRows, ShipmentRow } from "@/lib/shipment-utils"
 import { generateTrackingNumber } from "@/lib/api-utils"
+import { logger } from "@/lib/logger"
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
       shipments,
     })
   } catch (error) {
-    console.error('Error fetching user shipments:', error)
+    logger.error('Error fetching user shipments', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -181,7 +182,7 @@ export async function POST(request: NextRequest) {
     } catch (transactionError: any) {
       // Rollback transaction on any error
       await client.query('ROLLBACK')
-      console.error('Transaction error during shipment creation:', transactionError)
+      logger.error('Transaction error during shipment creation', transactionError)
       
       // Handle user-friendly error messages
       if (transactionError.message && transactionError.message.includes('already have a')) {
@@ -198,7 +199,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('Error creating shipment:', error)
+    logger.error('Error creating shipment', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

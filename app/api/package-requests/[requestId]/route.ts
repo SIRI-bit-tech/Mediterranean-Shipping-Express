@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { pool, query } from "@/lib/db"
 import { requireAdminAuth } from "@/lib/auth"
+import { logger } from "@/lib/logger"
 
 export async function PUT(
   request: NextRequest,
@@ -76,9 +77,19 @@ export async function PUT(
               shipmentUpdates.on_hold_reason = packageRequest.reason || 'Customer requested hold'
               break
             case 'REDIRECT': {
-              const redirectData = typeof packageRequest.request_data === 'string' 
-                ? JSON.parse(packageRequest.request_data) 
-                : packageRequest.request_data
+              let redirectData
+              try {
+                redirectData = typeof packageRequest.request_data === 'string' 
+                  ? JSON.parse(packageRequest.request_data) 
+                  : packageRequest.request_data
+              } catch (parseError) {
+                logger.error('Error parsing redirect data for request', parseError, { requestId: packageRequest.id })
+                await client.query('ROLLBACK')
+                return NextResponse.json({ 
+                  error: "Invalid redirect data format in package request" 
+                }, { status: 400 })
+              }
+              
               if (redirectData.newAddress) {
                 // In a real system, you'd create a new address record
                 shipmentUpdates.current_location = redirectData.newAddress
@@ -89,9 +100,19 @@ export async function PUT(
               shipmentUpdates.status = 'RETURNING'
               break
             case 'RESCHEDULE': {
-              const rescheduleData = typeof packageRequest.request_data === 'string' 
-                ? JSON.parse(packageRequest.request_data) 
-                : packageRequest.request_data
+              let rescheduleData
+              try {
+                rescheduleData = typeof packageRequest.request_data === 'string' 
+                  ? JSON.parse(packageRequest.request_data) 
+                  : packageRequest.request_data
+              } catch (parseError) {
+                logger.error('Error parsing reschedule data for request', parseError, { requestId: packageRequest.id })
+                await client.query('ROLLBACK')
+                return NextResponse.json({ 
+                  error: "Invalid reschedule data format in package request" 
+                }, { status: 400 })
+              }
+              
               if (rescheduleData.newDeliveryDate) {
                 shipmentUpdates.estimated_delivery_date = rescheduleData.newDeliveryDate
               }
@@ -223,10 +244,10 @@ export async function PUT(
           adminId: admin.id
         })
         
-        console.log(`[Socket.IO] Package request updated: ${requestId}`)
+        logger.debug('Package request updated', { requestId })
       }
     } catch (socketError) {
-      console.error('Error emitting Socket.IO event:', socketError)
+      logger.error('Error emitting Socket.IO event', socketError)
     }
 
     return NextResponse.json({
@@ -239,7 +260,7 @@ export async function PUT(
       }
     })
   } catch (error) {
-    console.error('Error updating package request:', error)
+    logger.error('Error updating package request', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -297,7 +318,7 @@ export async function GET(
       }
     })
   } catch (error) {
-    console.error('Error fetching package request:', error)
+    logger.error('Error fetching package request', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

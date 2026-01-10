@@ -61,7 +61,6 @@ async function runSchema() {
     
   } catch (error) {
     console.error('❌ Schema execution failed:', error.message)
-    console.error('Full error:', error)
     process.exit(1)
   } finally {
     await pool.end()

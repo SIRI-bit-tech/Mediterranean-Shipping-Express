@@ -1,5 +1,6 @@
 import { jwtVerify, SignJWT } from 'jose'
 import { randomBytes } from 'crypto'
+import { logger } from './logger'
 
 // Ensure JWT_SECRET is properly configured
 function getJWTSecret(): Uint8Array {
@@ -11,7 +12,7 @@ function getJWTSecret(): Uint8Array {
   
   // Only allow fallback in development with a strong random value
   if (process.env.NODE_ENV === 'development') {
-    console.warn('⚠️  JWT_SECRET not set in development - using random secret (tokens will not persist across restarts)')
+    logger.warn('JWT_SECRET not set in development - using random secret (tokens will not persist across restarts)')
     return randomBytes(32) // 256-bit random secret
   }
   
@@ -67,7 +68,7 @@ export async function verifyToken(token: string): Promise<JWTPayload | null> {
     
     return null
   } catch (error) {
-    console.error('JWT verification error:', error)
+    logger.error('JWT verification error', error)
     return null
   }
 }

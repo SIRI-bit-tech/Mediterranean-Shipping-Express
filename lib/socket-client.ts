@@ -4,6 +4,7 @@
  */
 
 import { io, Socket } from 'socket.io-client'
+import { logger } from './logger'
 
 interface DriverLocation {
   driverId: string
@@ -89,26 +90,26 @@ class SocketService {
     this.socket = io(socketUrl, socketOptions)
 
     this.socket.on('connect', () => {
-      console.log('Socket.IO connected:', this.socket?.id)
+      logger.debug('Socket.IO connected', { socketId: this.socket?.id })
       this.isConnected = true
       
       // Log connection type
       const connectionInfo = this.getConnectionInfo()
-      console.log(`Connected as: ${connectionInfo.userType} user`)
+      logger.debug('Socket connection established', { userType: connectionInfo.userType })
     })
 
     this.socket.on('disconnect', (reason) => {
-      console.log('Socket.IO disconnected:', reason)
+      logger.debug('Socket.IO disconnected', { reason })
       this.isConnected = false
     })
 
     this.socket.on('connect_error', (error) => {
-      console.error('Socket.IO connection error:', error)
+      logger.error('Socket.IO connection error', error)
       this.isConnected = false
     })
 
     this.socket.on('reconnect_failed', () => {
-      console.error('Socket.IO reconnection failed after 2 attempts')
+      logger.error('Socket.IO reconnection failed after attempts')
       this.isConnected = false
     })
 

@@ -161,7 +161,7 @@ export function useDriverLocationUpdater() {
     try {
       socketService.updateDriverLocation(location)
     } catch (error) {
-      console.error('Failed to update driver location:', error)
+      // Failed to update driver location - handle silently
     } finally {
       setIsUpdating(false)
     }
@@ -190,13 +190,17 @@ export function useAdminDashboard() {
     checkConnection()
     const connectionInterval = setInterval(checkConnection, 5000)
 
-    // Subscribe to all driver location updates
-    const unsubscribeDrivers = socketService.subscribeToAllDrivers((location: DriverLocation) => {
+    let unsubscribeDrivers: (() => void) | null = null
+
+    // Subscribe to all driver location updates (async)
+    socketService.subscribeToAllDrivers((location: DriverLocation) => {
       setDrivers(prev => {
         const updated = new Map(prev)
         updated.set(location.driverId, location)
         return updated
       })
+    }).then(unsubscribe => {
+      unsubscribeDrivers = unsubscribe
     })
 
     // Subscribe to all admin activities

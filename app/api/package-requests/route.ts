@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
+import { logger } from "@/lib/logger"
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
     // Otherwise, handle as creation request
     return handlePackageRequestCreation(request, body)
   } catch (error) {
-    console.error('Error in package requests POST:', error)
+    logger.error('Error in package requests POST', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -124,10 +125,10 @@ async function handlePackageRequestCreation(request: NextRequest, body: any) {
           io.to(`user-${shipment.user_id}`).emit('package-request-update', updateData)
         }
         
-        console.log(`[Socket.IO] Package request created: ${packageRequest.id}`)
+        logger.debug('Package request created', { packageRequestId: packageRequest.id })
       }
     } catch (socketError) {
-      console.error('Error emitting Socket.IO event:', socketError)
+      logger.error('Error emitting Socket.IO event', socketError)
     }
 
     return NextResponse.json({
@@ -141,7 +142,7 @@ async function handlePackageRequestCreation(request: NextRequest, body: any) {
       }
     })
   } catch (error) {
-    console.error('Error creating package request:', error)
+    logger.error('Error creating package request', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -228,7 +229,7 @@ async function handlePackageRequestRetrieval(request: NextRequest, body: any) {
       data: result.rows
     })
   } catch (error) {
-    console.error('Error fetching package requests:', error)
+    logger.error('Error fetching package requests (retrieval)', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -318,7 +319,7 @@ export async function GET(request: NextRequest) {
       data: result.rows
     })
   } catch (error) {
-    console.error('Error fetching package requests:', error)
+    logger.error('Error fetching package requests (final)', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

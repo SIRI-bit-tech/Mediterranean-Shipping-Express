@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
 import { requireAdminAuth } from "@/lib/auth"
+import { logger } from "@/lib/logger"
 
 export async function PUT(
   request: NextRequest,
@@ -74,7 +75,7 @@ export async function PUT(
       },
     })
   } catch (error) {
-    console.error('Error updating shipment status:', error)
+    logger.error('Error updating shipment status', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

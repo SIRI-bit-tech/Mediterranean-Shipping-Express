@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
+import { logger } from "@/lib/logger"
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ trackingNumber: string }> }) {
   try {
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error("[MSE] Timeline error:", error)
+    logger.error('Timeline error', error)
     return NextResponse.json(
       {
         success: false,
