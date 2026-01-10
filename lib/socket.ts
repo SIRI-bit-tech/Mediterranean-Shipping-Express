@@ -39,11 +39,19 @@ export function subscribeToShipment(trackingNumber: string) {
 export function unsubscribeFromShipment(trackingNumber: string) {
   if (typeof window === 'undefined') return
   
-  initializeSocket().then(socket => {
-    if (socket) {
-      socket.emit('unsubscribe:shipment', { trackingNumber })
-    }
-  })
+  // Only emit unsubscribe if socket already exists or initialization is in progress
+  if (clientSocket) {
+    // Socket already exists, emit directly
+    clientSocket.emit('unsubscribe:shipment', { trackingNumber })
+  } else if (socketInitPromise) {
+    // Initialization is in progress, wait for it to complete
+    socketInitPromise.then(socket => {
+      if (socket) {
+        socket.emit('unsubscribe:shipment', { trackingNumber })
+      }
+    })
+  }
+  // If no socket exists and no initialization in progress, do nothing
 }
 
 export function onTrackingUpdate(callback: (update: TrackingUpdate) => void) {
