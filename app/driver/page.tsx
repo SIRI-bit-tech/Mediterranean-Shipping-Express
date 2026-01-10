@@ -201,37 +201,40 @@ export default function DriverDashboard() {
     <main className="min-h-screen flex flex-col bg-gray-50">
       <MSEHeader />
 
-      <div className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-12">
+      <div className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-12">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 sm:mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-black">Driver Dashboard</h1>
-            <p className="text-gray-600 mt-2">Manage your deliveries for today</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-black">Driver Dashboard</h1>
+            <p className="text-gray-600 mt-1 sm:mt-2">Manage your deliveries for today</p>
           </div>
-          <div className="mt-4 md:mt-0 flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Button
               onClick={toggleGPS}
               variant={gpsEnabled ? "default" : "outline"}
-              className={gpsEnabled ? "bg-green-600 text-white hover:bg-green-700" : ""}
+              className={`text-sm ${gpsEnabled ? "bg-green-600 text-white hover:bg-green-700" : ""}`}
+              size="sm"
             >
-              <Navigation className="h-4 w-4 mr-2" />
-              {gpsEnabled ? "GPS Active" : "Enable GPS"}
+              <Navigation className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">{gpsEnabled ? "GPS Active" : "Enable GPS"}</span>
+              <span className="sm:hidden">{gpsEnabled ? "GPS" : "GPS"}</span>
             </Button>
-            <Button variant="outline" className="border-gray-300 bg-transparent">
-              <LogOut className="h-4 w-4 mr-2" />
-              Logout
+            <Button variant="outline" className="border-gray-300 bg-transparent text-sm" size="sm">
+              <LogOut className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Logout</span>
+              <span className="sm:hidden">Out</span>
             </Button>
           </div>
         </div>
 
         {/* GPS Status Alert */}
         {gpsEnabled && location && (
-          <Card className="mb-8 p-4 bg-green-50 border border-green-200">
-            <div className="flex items-center gap-3">
-              <MapPin className="h-5 w-5 text-green-600" />
-              <div>
-                <p className="font-semibold text-green-900">GPS Tracking Active</p>
-                <p className="text-sm text-green-700">
+          <Card className="mb-6 sm:mb-8 p-3 sm:p-4 bg-green-50 border border-green-200">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="font-semibold text-green-900 text-sm sm:text-base">GPS Tracking Active</p>
+                <p className="text-xs sm:text-sm text-green-700 break-all">
                   Your location is being shared: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
                 </p>
               </div>
@@ -240,7 +243,7 @@ export default function DriverDashboard() {
         )}
 
         {/* Stats */}
-        <div className="mb-8">
+        <div className="mb-6 sm:mb-8">
           <DriverStats
             assignedDeliveries={stats.assignedDeliveries}
             completedToday={stats.completedToday}
@@ -250,22 +253,23 @@ export default function DriverDashboard() {
         </div>
 
         {/* Deliveries */}
-        <Card className="p-6">
+        <Card className="p-3 sm:p-6">
           <Tabs defaultValue="assigned" className="w-full">
-            <TabsList className="mb-6">
-              <TabsTrigger value="assigned">
-                Assigned ({deliveries.filter((d) => ["OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(d.status)).length})
+            <TabsList className="mb-4 sm:mb-6 w-full sm:w-auto">
+              <TabsTrigger value="assigned" className="flex-1 sm:flex-none text-xs sm:text-sm">
+                <span className="hidden sm:inline">Assigned ({deliveries.filter((d) => ["OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(d.status)).length})</span>
+                <span className="sm:hidden">Active ({deliveries.filter((d) => ["OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(d.status)).length})</span>
               </TabsTrigger>
-              <TabsTrigger value="completed">
+              <TabsTrigger value="completed" className="flex-1 sm:flex-none text-xs sm:text-sm">
                 Completed ({stats.completedToday})
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="assigned" className="space-y-4">
+            <TabsContent value="assigned" className="space-y-3 sm:space-y-4">
               {deliveries.filter((d) => ["OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(d.status)).length === 0 ? (
-                <div className="text-center py-12">
-                  <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No active deliveries assigned</p>
+                <div className="text-center py-8 sm:py-12">
+                  <AlertCircle className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
+                  <p className="text-gray-600 text-sm sm:text-base">No active deliveries assigned</p>
                 </div>
               ) : (
                 deliveries
@@ -283,11 +287,11 @@ export default function DriverDashboard() {
               )}
             </TabsContent>
 
-            <TabsContent value="completed" className="space-y-4">
+            <TabsContent value="completed" className="space-y-3 sm:space-y-4">
               {stats.completedToday === 0 ? (
-                <div className="text-center py-12 text-gray-600">
-                  <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-4" />
-                  <p>No deliveries completed today yet.</p>
+                <div className="text-center py-8 sm:py-12 text-gray-600">
+                  <CheckCircle2 className="h-10 w-10 sm:h-12 sm:w-12 text-green-600 mx-auto mb-3 sm:mb-4" />
+                  <p className="text-sm sm:text-base">No deliveries completed today yet.</p>
                 </div>
               ) : (
                 deliveries

@@ -30,36 +30,38 @@ export function TrackingCard({ shipment }: TrackingCardProps) {
   }
 
   return (
-    <Card className="p-6 hover:shadow-lg transition-shadow">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-            <Package className="h-5 w-5 text-black" />
+    <Card className="p-4 sm:p-6 hover:shadow-lg transition-shadow">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3 sm:mb-4 gap-3 sm:gap-0">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+            <Package className="h-4 w-4 sm:h-5 sm:w-5 text-black" />
           </div>
-          <div>
-            <p className="text-sm font-mono text-gray-600">{shipment.trackingNumber}</p>
-            <p className="font-semibold text-black">{shipment.description}</p>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs sm:text-sm font-mono text-gray-600 break-all sm:break-normal">{shipment.trackingNumber}</p>
+            <p className="font-semibold text-black text-sm sm:text-base truncate">{shipment.description}</p>
           </div>
         </div>
-        <Badge className={getStatusColor(shipment.status)}>{shipment.status.replace(/_/g, " ")}</Badge>
+        <Badge className={`${getStatusColor(shipment.status)} text-xs sm:text-sm self-start sm:self-auto flex-shrink-0`}>
+          {shipment.status.replace(/_/g, " ")}
+        </Badge>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 text-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 text-xs sm:text-sm mb-3 sm:mb-4">
         <div className="flex items-center gap-2 text-gray-600">
-          <MapPin className="h-4 w-4 text-yellow-500" />
-          <span>{shipment.currentCity || "In Transit"}</span>
+          <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-500 flex-shrink-0" />
+          <span className="truncate">{shipment.currentCity || "In Transit"}</span>
         </div>
         <div className="flex items-center gap-2 text-gray-600">
-          <Truck className="h-4 w-4 text-yellow-500" />
-          <span>{shipment.transportMode}</span>
+          <Truck className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-500 flex-shrink-0" />
+          <span className="truncate">{shipment.transportMode}</span>
         </div>
-        <div className="col-span-2 flex items-center gap-2 text-gray-600">
-          <Calendar className="h-4 w-4 text-yellow-500" />
-          <span>Arriving by {new Date(shipment.estimatedDeliveryDate).toLocaleDateString()}</span>
+        <div className="sm:col-span-2 flex items-center gap-2 text-gray-600">
+          <Calendar className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-500 flex-shrink-0" />
+          <span className="truncate">Arriving by {new Date(shipment.estimatedDeliveryDate).toLocaleDateString()}</span>
         </div>
       </div>
 
-      <button className="w-full mt-4 px-4 py-2 rounded-lg bg-gray-50 text-black font-medium hover:bg-gray-100 transition-colors">
+      <button className="w-full px-3 py-2 sm:px-4 sm:py-2 rounded-lg bg-gray-50 text-black font-medium hover:bg-gray-100 transition-colors text-sm sm:text-base">
         View Details
       </button>
     </Card>

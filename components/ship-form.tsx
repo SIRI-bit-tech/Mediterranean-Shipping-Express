@@ -204,23 +204,23 @@ export function ShipForm() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
       {/* Left Column - Form */}
       <div className="lg:col-span-2">
         {step === 1 && (
-          <Card className="p-8 bg-white">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-bold text-black flex items-center gap-3">
-                <MapPin className="h-6 w-6 text-yellow-500" />
+          <Card className="p-4 sm:p-8 bg-white">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 sm:mb-8 gap-4">
+              <h2 className="text-xl sm:text-2xl font-bold text-black flex items-center gap-3">
+                <MapPin className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500" />
                 Sender Details
               </h2>
-              <button className="text-yellow-500 text-sm font-semibold hover:text-yellow-600">
+              <button className="text-yellow-500 text-sm font-semibold hover:text-yellow-600 self-start sm:self-auto">
                 Load Saved Address
               </button>
             </div>
 
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4 sm:space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-black font-semibold mb-2 block text-sm">Contact Name</Label>
                   <Input
@@ -245,7 +245,7 @@ export function ShipForm() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-black font-semibold mb-2 block text-sm">Phone Number</Label>
                   <Input
@@ -269,16 +269,16 @@ export function ShipForm() {
                 </div>
               </div>
 
-              <div className="border-t pt-8">
-                <h3 className="text-lg font-bold text-black flex items-center gap-2 mb-6">
-                  <Package className="h-5 w-5 text-yellow-500" />
+              <div className="border-t pt-6 sm:pt-8">
+                <h3 className="text-base sm:text-lg font-bold text-black flex items-center gap-2 mb-4 sm:mb-6">
+                  <Package className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500" />
                   Pickup Address
                 </h3>
 
-                <div className="mb-6">
+                <div className="mb-4 sm:mb-6">
                   <Label className="text-black font-semibold mb-2 block text-sm">Search Address</Label>
                   <div className="relative">
-                    <Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                    <Search className="absolute left-3 top-3 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                     <Input
                       name="searchAddress"
                       placeholder="Start typing to search address..."
@@ -287,13 +287,13 @@ export function ShipForm() {
                       className="pl-10 bg-gray-50 border-gray-200"
                     />
                     <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-yellow-500">
-                      <MapPin className="h-5 w-5" />
+                      <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
                     </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div className="col-span-2">
+                <div className="grid grid-cols-1 gap-4 mb-4">
+                  <div>
                     <Label className="text-black font-semibold mb-2 block text-sm">Street Address</Label>
                     <Input
                       name="streetAddress"
@@ -305,7 +305,7 @@ export function ShipForm() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                   <Input
                     name="apt"
                     placeholder="Apt / Suite"
@@ -322,7 +322,7 @@ export function ShipForm() {
                   />
                 </div>
 
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
                   <Input
                     name="state"
                     placeholder="NY"
@@ -352,7 +352,7 @@ export function ShipForm() {
                     name="originAddressLabel"
                     value={formData.originAddressLabel || 'shipping'}
                     onChange={handleSelectChange}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-yellow-500 bg-gray-50 text-black"
+                    className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-yellow-500 bg-gray-50 text-black"
                   >
                     <option value="home">Home</option>
                     <option value="work">Work</option>
@@ -365,9 +365,9 @@ export function ShipForm() {
 
               <Button
                 onClick={() => setStep(2)}
-                className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 text-lg"
+                className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 sm:py-3 text-base sm:text-lg"
               >
-                Next: Recipient Details <ArrowRight className="h-5 w-5 ml-2" />
+                Next: Recipient Details <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 ml-2" />
               </Button>
             </div>
           </Card>
@@ -636,36 +636,38 @@ export function ShipForm() {
       </div>
 
       {/* Right Column - Route Preview & Estimated Cost */}
-      <div className="lg:col-span-1">
-        <Card className="p-8 bg-white sticky top-4 h-fit">
-          <h3 className="text-lg font-bold text-black mb-6 flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-yellow-500" />
+      <div className="lg:col-span-1 order-first lg:order-last">
+        <Card className="p-4 sm:p-8 bg-white lg:sticky lg:top-4 h-fit">
+          <h3 className="text-base sm:text-lg font-bold text-black mb-4 sm:mb-6 flex items-center gap-2">
+            <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500" />
             ROUTE PREVIEW
           </h3>
 
-          <div className="h-60 bg-gray-200 rounded-lg mb-6 flex items-center justify-center overflow-hidden">
+          <div className="h-40 sm:h-60 bg-gray-200 rounded-lg mb-4 sm:mb-6 flex items-center justify-center overflow-hidden">
             <div className="w-full h-full bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center">
               <div className="text-center">
-                <MapPin className="h-8 w-8 text-blue-500 mx-auto mb-2" />
-                <p className="text-sm text-gray-600">Route will appear here</p>
+                <MapPin className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500 mx-auto mb-2" />
+                <p className="text-xs sm:text-sm text-gray-600">Route will appear here</p>
               </div>
             </div>
           </div>
 
-          <div className="mb-4">
-            <p className="text-xs text-gray-500 font-semibold uppercase mb-1">Origin</p>
-            <p className="text-sm text-gray-600">Pending Input...</p>
+          <div className="grid grid-cols-2 lg:grid-cols-1 gap-4 lg:gap-0 mb-4 lg:mb-6">
+            <div className="mb-0 lg:mb-4">
+              <p className="text-xs text-gray-500 font-semibold uppercase mb-1">Origin</p>
+              <p className="text-xs sm:text-sm text-gray-600">Pending Input...</p>
+            </div>
+
+            <div className="mb-0 lg:mb-6">
+              <p className="text-xs text-gray-500 font-semibold uppercase mb-1">Destination</p>
+              <p className="text-xs sm:text-sm text-gray-600">--</p>
+            </div>
           </div>
 
-          <div className="mb-6">
-            <p className="text-xs text-gray-500 font-semibold uppercase mb-1">Destination</p>
-            <p className="text-sm text-gray-600">--</p>
-          </div>
-
-          <div className="bg-yellow-50 rounded-lg p-6 border border-yellow-100">
-            <p className="text-xs text-yellow-600 font-bold uppercase tracking-wider mb-3">Estimated Cost</p>
-            <div className="flex items-baseline gap-1 mb-4">
-              <span className="text-3xl font-bold text-black">{estimatedCost}</span>
+          <div className="bg-yellow-50 rounded-lg p-4 sm:p-6 border border-yellow-100">
+            <p className="text-xs text-yellow-600 font-bold uppercase tracking-wider mb-2 sm:mb-3">Estimated Cost</p>
+            <div className="flex items-baseline gap-1 mb-3 sm:mb-4">
+              <span className="text-2xl sm:text-3xl font-bold text-black">{estimatedCost}</span>
               <span className="text-sm text-gray-600">USD</span>
             </div>
             <p className="text-xs text-gray-600">Complete Sender and Recipient details to calculate shipping rates.</p>

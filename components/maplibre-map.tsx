@@ -83,7 +83,7 @@ export function MapLibreMap({
       return defaultZoom
     }
 
-    // Initialize MapLibre GL map
+    // Initialize MapLibre GL map with error handling
     map.current = new maplibregl.Map({
       container: mapContainer.current,
       style: {
@@ -92,25 +92,48 @@ export function MapLibreMap({
           'osm-tiles': {
             type: 'raster',
             tiles: [
-              'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-              'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-              'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+              '/api/tiles/{z}/{x}/{y}'
             ],
             tileSize: 256,
-            attribution: '© OpenStreetMap contributors'
+            attribution: '© OpenStreetMap contributors',
+            maxzoom: 19
           }
         },
         layers: [
           {
             id: 'osm-tiles-layer',
             type: 'raster',
-            source: 'osm-tiles'
+            source: 'osm-tiles',
+            minzoom: 0,
+            maxzoom: 22
           }
         ]
       },
       center: getMapCenter(),
       zoom: getMapZoom(),
-      attributionControl: false // We'll add it manually
+      attributionControl: false, // We'll add it manually
+      maxZoom: 18,
+      minZoom: 2
+    })
+
+    // Add error handling for tile loading
+    map.current.on('error', (e) => {
+      console.warn('Map error (non-critical):', e.error?.message || 'Unknown map error')
+      // Don't throw - let the map continue working
+    })
+
+    // Add source error handling
+    map.current.on('sourcedata', (e) => {
+      if (e.isSourceLoaded && e.sourceId === 'osm-tiles') {
+        // Source loaded successfully
+      }
+    })
+
+    // Add fallback for tile loading errors
+    map.current.on('sourcedataloading', (e) => {
+      if (e.sourceId === 'osm-tiles' && e.isSourceLoaded === false) {
+        // Show loading state
+      }
     })
 
     // Add navigation controls
@@ -140,153 +163,219 @@ export function MapLibreMap({
   useEffect(() => {
     if (!map.current || !isLoaded) return
 
-    // Clear existing markers
-    markersRef.current.forEach(marker => marker.remove())
-    markersRef.current = []
+    // Use a small delay to ensure map is fully ready
+    const addMarkersWithDelay = () => {
+      // Clear existing markers
+      markersRef.current.forEach(marker => marker.remove())
+      markersRef.current = []
 
-    // Create custom marker elements with transport mode icons and animations
-    const createMarkerElement = (color: string, label: string, isActive = false, transportIcon?: string) => {
-      const el = document.createElement('div')
-      el.className = `custom-marker ${isActive ? 'active-marker' : ''}`
-      
-      const icon = transportIcon || label
-      
-      el.style.cssText = `
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background-color: ${color};
-        border: 3px solid white;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        font-size: ${transportIcon ? '18px' : '12px'};
-        color: white;
-        transition: all 0.3s ease;
-        position: relative;
-        ${isActive ? `
-          animation: pulse 2s infinite;
-          box-shadow: 0 0 0 0 ${color}40;
-        ` : ''}
-      `
-      
-      // Add pulsing animation for active markers
-      if (isActive) {
-        const style = document.createElement('style')
-        style.textContent = `
-          @keyframes pulse {
-            0% {
-              box-shadow: 0 0 0 0 ${color}70;
-            }
-            70% {
-              box-shadow: 0 0 0 20px ${color}00;
-            }
-            100% {
-              box-shadow: 0 0 0 0 ${color}00;
-            }
-          }
-          .active-marker:hover {
-            transform: scale(1.1);
-          }
+      // Create custom marker elements with transport mode icons and animations
+      const createMarkerElement = (color: string, label: string, isActive = false, transportIcon?: string) => {
+        const el = document.createElement('div')
+        el.className = `custom-marker ${isActive ? 'active-marker' : ''}`
+        
+        const icon = transportIcon || label
+        
+        el.style.cssText = `
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background-color: ${color};
+          border: 3px solid white;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: bold;
+          font-size: ${transportIcon ? '18px' : '12px'};
+          color: white;
+          transition: all 0.3s ease;
+          position: relative;
+          ${isActive ? `
+            animation: pulse 2s infinite;
+            box-shadow: 0 0 0 0 ${color}40;
+          ` : ''}
         `
-        document.head.appendChild(style)
+        
+        // Add pulsing animation for active markers
+        if (isActive) {
+          const style = document.createElement('style')
+          style.textContent = `
+            @keyframes pulse {
+              0% {
+                box-shadow: 0 0 0 0 ${color}70;
+              }
+              70% {
+                box-shadow: 0 0 0 20px ${color}00;
+              }
+              100% {
+                box-shadow: 0 0 0 0 ${color}00;
+              }
+            }
+            .active-marker:hover {
+              transform: scale(1.1);
+            }
+          `
+          document.head.appendChild(style)
+        }
+        
+        el.textContent = icon
+        return el
       }
-      
-      el.textContent = icon
-      return el
-    }
 
-    // Get transport mode icon
-    const getTransportIcon = (mode: string) => {
-      switch (mode) {
-        case 'AIR': return '✈️'
-        case 'LAND': return '🚛'
-        case 'WATER': return '🚢'
-        case 'MULTIMODAL': return '📦'
-        default: return '🚛'
+      // Get transport mode icon
+      const getTransportIcon = (mode: string) => {
+        switch (mode) {
+          case 'AIR': return '✈️'
+          case 'LAND': return '🚛'
+          case 'WATER': return '🚢'
+          case 'MULTIMODAL': return '📦'
+          default: return '🚛'
+        }
+      }
+
+      // Add origin marker
+      if (originLocation) {
+        // Add coordinate validation
+        const originLng = Number(originLocation.longitude)
+        const originLat = Number(originLocation.latitude)
+        
+        // Validate coordinates are valid numbers
+        if (isNaN(originLng) || isNaN(originLat)) {
+          console.warn('Invalid origin coordinates:', { 
+            longitude: originLocation.longitude, 
+            latitude: originLocation.latitude 
+          })
+          return
+        }
+        
+        const originMarker = new maplibregl.Marker({
+          element: createMarkerElement('#10B981', 'O', false),
+          anchor: 'center'
+        })
+          .setLngLat([originLng, originLat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 25 }).setHTML(
+              `<div><strong>Origin</strong>${originLocation.address ? '<br/>' + originLocation.address : ''}</div>`
+            )
+          )
+          .addTo(map.current!)
+
+        markersRef.current.push(originMarker)
+      }
+
+      // Add current shipment location marker with transport mode icon and pulsing animation
+      if (shipmentLocation) {
+        // Add coordinate validation
+        const currentLng = Number(shipmentLocation.longitude)
+        const currentLat = Number(shipmentLocation.latitude)
+        
+        // Validate coordinates are valid numbers
+        if (isNaN(currentLng) || isNaN(currentLat)) {
+          console.warn('Invalid current location coordinates:', { 
+            longitude: shipmentLocation.longitude, 
+            latitude: shipmentLocation.latitude 
+          })
+          return
+        }
+        
+        const transportIcon = getTransportIcon(transportMode)
+        const shipmentMarker = new maplibregl.Marker({
+          element: createMarkerElement('#FFB700', 'S', true, transportIcon),
+          anchor: 'center'
+        })
+          .setLngLat([currentLng, currentLat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 25 }).setHTML(
+              `<div><strong>Current Location</strong><br/>${shipmentLocation.city}, ${shipmentLocation.country}<br/><em>Transport: ${transportMode}</em></div>`
+            )
+          )
+          .addTo(map.current!)
+
+        markersRef.current.push(shipmentMarker)
+      }
+
+      // Add destination marker
+      if (destinationLocation) {
+        // Add coordinate validation
+        const destLng = Number(destinationLocation.longitude)
+        const destLat = Number(destinationLocation.latitude)
+        
+        // Validate coordinates are valid numbers
+        if (isNaN(destLng) || isNaN(destLat)) {
+          console.warn('Invalid destination coordinates:', { 
+            longitude: destinationLocation.longitude, 
+            latitude: destinationLocation.latitude 
+          })
+          return
+        }
+        
+        const destMarker = new maplibregl.Marker({
+          element: createMarkerElement('#3B82F6', 'D', false),
+          anchor: 'center'
+        })
+          .setLngLat([destLng, destLat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 25 }).setHTML(
+              `<div><strong>Destination</strong>${destinationLocation.address ? '<br/>' + destinationLocation.address : ''}</div>`
+            )
+          )
+          .addTo(map.current!)
+
+        markersRef.current.push(destMarker)
+      }
+
+      // Add driver location marker
+      if (driverLocation) {
+        const driverMarker = new maplibregl.Marker({
+          element: createMarkerElement('#EF4444', '👤', true),
+          anchor: 'center'
+        })
+          .setLngLat([driverLocation.longitude, driverLocation.latitude])
+          .setPopup(
+            new maplibregl.Popup({ offset: 25 }).setHTML(
+              '<div><strong>Driver Location</strong><br/>Live tracking</div>'
+            )
+          )
+          .addTo(map.current!)
+
+        markersRef.current.push(driverMarker)
+      }
+
+      // Fit map to show all markers with proper timing
+      if (markersRef.current.length > 1) {
+        const bounds = new maplibregl.LngLatBounds()
+        markersRef.current.forEach(marker => {
+          bounds.extend(marker.getLngLat())
+        })
+        
+        // Use requestAnimationFrame to ensure proper timing
+        requestAnimationFrame(() => {
+          if (map.current) {
+            map.current.fitBounds(bounds, { 
+              padding: 50,
+              duration: 1000 // Smooth animation
+            })
+          }
+        })
+      } else if (markersRef.current.length === 1) {
+        // If only one marker, center on it
+        const marker = markersRef.current[0]
+        requestAnimationFrame(() => {
+          if (map.current) {
+            map.current.easeTo({
+              center: marker.getLngLat(),
+              zoom: 10,
+              duration: 1000
+            })
+          }
+        })
       }
     }
 
-    // Add origin marker
-    if (originLocation) {
-      const originMarker = new maplibregl.Marker({
-        element: createMarkerElement('#10B981', 'O', false),
-        anchor: 'center'
-      })
-        .setLngLat([originLocation.longitude, originLocation.latitude])
-        .setPopup(
-          new maplibregl.Popup({ offset: 25 }).setHTML(
-            `<div><strong>Origin</strong>${originLocation.address ? '<br/>' + originLocation.address : ''}</div>`
-          )
-        )
-        .addTo(map.current)
-
-      markersRef.current.push(originMarker)
-    }
-
-    // Add current shipment location marker with transport mode icon and pulsing animation
-    if (shipmentLocation) {
-      const transportIcon = getTransportIcon(transportMode)
-      const shipmentMarker = new maplibregl.Marker({
-        element: createMarkerElement('#FFB700', 'S', true, transportIcon),
-        anchor: 'center'
-      })
-        .setLngLat([shipmentLocation.longitude, shipmentLocation.latitude])
-        .setPopup(
-          new maplibregl.Popup({ offset: 25 }).setHTML(
-            `<div><strong>Current Location</strong><br/>${shipmentLocation.city}, ${shipmentLocation.country}<br/><em>Transport: ${transportMode}</em></div>`
-          )
-        )
-        .addTo(map.current)
-
-      markersRef.current.push(shipmentMarker)
-    }
-
-    // Add destination marker
-    if (destinationLocation) {
-      const destMarker = new maplibregl.Marker({
-        element: createMarkerElement('#3B82F6', 'D', false),
-        anchor: 'center'
-      })
-        .setLngLat([destinationLocation.longitude, destinationLocation.latitude])
-        .setPopup(
-          new maplibregl.Popup({ offset: 25 }).setHTML(
-            `<div><strong>Destination</strong>${destinationLocation.address ? '<br/>' + destinationLocation.address : ''}</div>`
-          )
-        )
-        .addTo(map.current)
-
-      markersRef.current.push(destMarker)
-    }
-
-    // Add driver location marker
-    if (driverLocation) {
-      const driverMarker = new maplibregl.Marker({
-        element: createMarkerElement('#EF4444', '👤', true),
-        anchor: 'center'
-      })
-        .setLngLat([driverLocation.longitude, driverLocation.latitude])
-        .setPopup(
-          new maplibregl.Popup({ offset: 25 }).setHTML(
-            '<div><strong>Driver Location</strong><br/>Live tracking</div>'
-          )
-        )
-        .addTo(map.current)
-
-      markersRef.current.push(driverMarker)
-    }
-
-    // Fit map to show all markers
-    if (markersRef.current.length > 1) {
-      const bounds = new maplibregl.LngLatBounds()
-      markersRef.current.forEach(marker => {
-        bounds.extend(marker.getLngLat())
-      })
-      map.current.fitBounds(bounds, { padding: 50 })
-    }
+    // Add markers with a small delay to ensure map is ready
+    setTimeout(addMarkersWithDelay, 50)
   }, [isLoaded, originLocation, shipmentLocation, destinationLocation, driverLocation, transportMode])
 
   // Add journey progress and connecting lines visualization

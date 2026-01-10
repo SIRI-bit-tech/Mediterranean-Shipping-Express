@@ -8,7 +8,7 @@ import { fallbackMapService } from './fallback-map-service'
 import { logger } from './logger'
 
 const GRAPHHOPPER_BASE_URL = process.env.GRAPHHOPPER_BASE_URL || process.env.NEXT_PUBLIC_GRAPHHOPPER_BASE_URL || 'https://graphhopper.com/api/1'
-const GRAPHHOPPER_API_KEY = process.env.GRAPHHOPPER_API_KEY
+const GRAPHHOPPER_API_KEY = process.env.GRAPHHOPPER_API_KEY || process.env.NEXT_PUBLIC_GRAPHHOPPER_API_KEY
 
 // Note: API key validation is done lazily in the constructor to avoid build-time errors
 
@@ -151,7 +151,10 @@ class GraphHopperService {
         const point = hit.point
 
         return {
-          coordinates: { latitude: point.lat, longitude: point.lng },
+          coordinates: { 
+            latitude: Math.round(point.lat * 1000000) / 1000000, // Round to 6 decimal places
+            longitude: Math.round(point.lng * 1000000) / 1000000 // Round to 6 decimal places
+          },
           formattedAddress: hit.name || query,
           confidence: hit.confidence || 0.8
         }

@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -64,7 +64,10 @@ interface TimelineEvent {
 
 export function TrackContent() {
   const searchParams = useSearchParams()
-  const [trackingNumber, setTrackingNumber] = useState(searchParams?.get("id") || "")
+  const params = useParams()
+  const [trackingNumber, setTrackingNumber] = useState(
+    searchParams?.get("id") || (params?.trackingNumber as string) || ""
+  )
   const [shipment, setShipment] = useState<TrackingData | null>(null)
   const [timeline, setTimeline] = useState<TimelineEvent[]>([])
   const [loading, setLoading] = useState(false)
@@ -421,30 +424,30 @@ export function TrackContent() {
   return (
     <>
       {/* Hero Section */}
-      <section className="bg-white border-b border-gray-200 py-12">
+      <section className="bg-white border-b border-gray-200 py-6 sm:py-12">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold text-black mb-4">Track Your Package</h1>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-black mb-4 sm:mb-6">Track Your Package</h1>
 
-          <form onSubmit={handleTrack} className="flex gap-3 mb-6">
+          <form onSubmit={handleTrack} className="flex flex-col sm:flex-row gap-3 mb-6">
             <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
               <Input
                 placeholder="MSE-A1B2C3D4"
                 value={trackingNumber}
                 onChange={(e) => setTrackingNumber(e.target.value)}
-                className="pl-12 text-lg px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-200"
+                className="pl-10 sm:pl-12 text-base sm:text-lg px-3 sm:px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-200 w-full"
               />
             </div>
             <Button
               type="submit"
               disabled={loading}
-              className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold px-8 py-3 rounded-lg"
+              className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold px-6 sm:px-8 py-3 rounded-lg w-full sm:w-auto"
             >
               {loading ? "Tracking..." : "Track"}
             </Button>
           </form>
 
-          {error && <div className="bg-red-50 border border-red-300 text-red-800 px-4 py-3 rounded-lg">{error}</div>}
+          {error && <div className="bg-red-50 border border-red-300 text-red-800 px-4 py-3 rounded-lg text-sm">{error}</div>}
         </div>
       </section>
 
@@ -453,35 +456,37 @@ export function TrackContent() {
         <section className="py-12 flex-1">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             {/* Status Header */}
-            <Card className="mb-8 p-6 bg-white border-l-4 border-yellow-500">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="inline-flex items-center gap-2 bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold">
+            <Card className="mb-8 p-4 sm:p-6 bg-white border-l-4 border-yellow-500">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
+                    <span className="inline-flex items-center gap-2 bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold w-fit">
                       {(() => {
                         const StatusIcon = getIconForStatus(shipment.status, shipment.transportMode)
                         return <StatusIcon className="h-4 w-4" />
                       })()}
                       {shipment.status}
                     </span>
-                    <span className="text-gray-600 text-sm font-mono"># {shipment.trackingNumber}</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowPackageRequestModal(true)}
-                      className="ml-auto"
-                    >
-                      <Settings className="h-4 w-4 mr-2" />
-                      Manage Package
-                    </Button>
+                    <span className="text-gray-600 text-sm font-mono break-all"># {shipment.trackingNumber}</span>
                   </div>
-                  <h2 className="text-3xl font-bold text-black mb-2">
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-black mb-2 break-words">
                     Estimated Delivery: {shipment.estimatedDelivery}
                   </h2>
                 </div>
-                <div className="text-right">
-                  <p className="text-gray-600 text-sm">Carrier</p>
-                  <p className="text-black font-bold text-lg">{shipment.carrier}</p>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                  <div className="text-left sm:text-right">
+                    <p className="text-gray-600 text-sm">Carrier</p>
+                    <p className="text-black font-bold text-base sm:text-lg break-words">{shipment.carrier}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPackageRequestModal(true)}
+                    className="w-full sm:w-auto whitespace-nowrap"
+                  >
+                    <Settings className="h-4 w-4 mr-2" />
+                    Manage Package
+                  </Button>
                 </div>
               </div>
             </Card>
@@ -491,10 +496,10 @@ export function TrackContent() {
               {/* Left Column - Map & Journey */}
               <div className="lg:col-span-2 space-y-8">
                 {/* Live Location Map */}
-                <Card className="p-6 bg-white">
-                  <div className="flex items-center justify-between mb-4">
+                <Card className="p-4 sm:p-6 bg-white">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 mb-4">
                     <p className="text-gray-600 text-sm font-semibold">LIVE LOCATION</p>
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                       {/* Connection status indicator - only show when connected */}
                       {isConnected && (
                         <div className="flex items-center gap-2">
@@ -503,14 +508,14 @@ export function TrackContent() {
                         </div>
                       )}
                       {routeInfo && (
-                        <div className="text-right text-xs text-gray-500">
+                        <div className="text-left sm:text-right text-xs text-gray-500">
                           <div>Distance: {formatDistance(routeInfo.distance)}</div>
                           <div>Duration: {formatDuration(routeInfo.duration)}</div>
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="h-96 rounded-lg overflow-hidden relative">
+                  <div className="h-64 sm:h-80 lg:h-96 rounded-lg overflow-hidden relative">
                     {shipment?.coordinates ? (
                       <MapLibreMap
                         shipmentLocation={shipment.coordinates.current}
@@ -530,7 +535,7 @@ export function TrackContent() {
                         <div className="text-gray-500">Loading map...</div>
                       </div>
                     )}
-                    <div className="absolute bottom-4 right-4 bg-black/70 backdrop-blur text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                    <div className="absolute bottom-2 sm:bottom-4 right-2 sm:right-4 bg-black/70 backdrop-blur text-white px-2 sm:px-4 py-1 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold">
                       {driverLocation && (
                         `DRIVER UPDATED: ${new Date(driverLocation.timestamp).toLocaleTimeString()}`
                       )}
