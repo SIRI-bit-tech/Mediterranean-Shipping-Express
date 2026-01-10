@@ -11,21 +11,21 @@ interface LogContext {
 }
 
 /**
- * List of sensitive field names to remove or redact
+ * List of sensitive field names to remove or redact (stored in lowercase for matching)
  */
 const SENSITIVE_FIELDS = new Set([
   'password',
   'token',
   'secret',
-  'apiKey',
-  'accessToken',
-  'refreshToken',
-  'sessionToken',
-  'authToken',
-  'privateKey',
-  'secretKey',
-  'apiSecret',
-  'clientSecret',
+  'apikey',
+  'accesstoken',
+  'refreshtoken',
+  'sessiontoken',
+  'authtoken',
+  'privatekey',
+  'secretkey',
+  'apisecret',
+  'clientsecret',
   'authorization',
   'auth'
 ])
@@ -33,7 +33,7 @@ const SENSITIVE_FIELDS = new Set([
 /**
  * Deep sanitization helper that recursively walks objects and arrays
  * @param obj - The object to sanitize
- * @param visited - Set to track visited objects (prevents cycles)
+ * @param visited - Set to track current recursion path (prevents cycles)
  * @returns Sanitized copy of the object
  */
 function deepSanitize(obj: any, visited: WeakSet<object> = new WeakSet()): any {
@@ -42,95 +42,109 @@ function deepSanitize(obj: any, visited: WeakSet<object> = new WeakSet()): any {
     return obj
   }
 
-  // Prevent infinite recursion from circular references
+  // Prevent infinite recursion from circular references (true cycles only)
   if (visited.has(obj)) {
     return '[Circular Reference]'
   }
+
+  // Add to current recursion path
   visited.add(obj)
-
-  // Handle Date objects
-  if (obj instanceof Date) {
-    return new Date(obj.getTime())
-  }
-
-  // Handle RegExp objects
-  if (obj instanceof RegExp) {
-    return new RegExp(obj)
-  }
-
-  // Handle Buffer objects (Node.js)
-  if (typeof Buffer !== 'undefined' && obj instanceof Buffer) {
-    return '[Buffer]'
-  }
-
-  // Handle ArrayBuffer and TypedArrays
-  if (obj instanceof ArrayBuffer) {
-    return '[ArrayBuffer]'
-  }
   
-  if (ArrayBuffer.isView(obj)) {
-    return '[TypedArray]'
-  }
-
-  // Handle Map objects
-  if (obj instanceof Map) {
-    const sanitizedMap = new Map()
-    for (const [key, value] of obj.entries()) {
-      const sanitizedKey = typeof key === 'string' && SENSITIVE_FIELDS.has(key.toLowerCase()) 
-        ? '[REDACTED_KEY]' 
-        : deepSanitize(key, visited)
-      const sanitizedValue = typeof key === 'string' && SENSITIVE_FIELDS.has(key.toLowerCase())
-        ? '[REDACTED]'
-        : deepSanitize(value, visited)
-      sanitizedMap.set(sanitizedKey, sanitizedValue)
+  try {
+    // Handle Date objects
+    if (obj instanceof Date) {
+      return new Date(obj.getTime())
     }
-    return sanitizedMap
-  }
 
-  // Handle Set objects
-  if (obj instanceof Set) {
-    const sanitizedSet = new Set()
-    for (const value of obj.values()) {
-      sanitizedSet.add(deepSanitize(value, visited))
+    // Handle RegExp objects
+    if (obj instanceof RegExp) {
+      return new RegExp(obj)
     }
-    return sanitizedSet
-  }
 
-  // Handle Error objects
-  if (obj instanceof Error) {
-    return {
-      name: obj.name,
-      message: obj.message,
-      stack: obj.stack
+    // Handle Buffer objects (Node.js) - type-agnostic detection
+    if (typeof Buffer !== 'undefined' && (Buffer as any).isBuffer && (Buffer as any).isBuffer(obj)) {
+      return '[Buffer]'
+    } else if (obj && obj.constructor && obj.constructor.name === 'Buffer') {
+      // Fallback: constructor name check for environments without Buffer.isBuffer
+      return '[Buffer]'
     }
-  }
 
-  // Handle Arrays
-  if (Array.isArray(obj)) {
-    return obj.map(item => deepSanitize(item, visited))
-  }
+    // Handle ArrayBuffer and TypedArrays
+    if (obj instanceof ArrayBuffer) {
+      return '[ArrayBuffer]'
+    }
+    
+    if (ArrayBuffer.isView(obj)) {
+      return '[TypedArray]'
+    }
 
-  // Handle plain objects and other object types
-  const sanitized: Record<string, any> = {}
-  
-  for (const [key, value] of Object.entries(obj)) {
-    // Check if the key is sensitive
-    if (SENSITIVE_FIELDS.has(key.toLowerCase())) {
-      sanitized[key] = '[REDACTED]'
-    } else if (key === 'userId' && typeof value === 'string' && value !== 'anonymous') {
-      // Special handling for userId truncation
-      if (value.length > 8) {
-        sanitized[key] = value.substring(0, 8) + '...'
-      } else {
-        sanitized[key] = value
+    // Handle Map objects
+    if (obj instanceof Map) {
+      const sanitizedMap = new Map()
+      for (const [key, value] of obj.entries()) {
+        // Preserve original key, only sanitize non-string or non-sensitive keys
+        const sanitizedKeyPreserved = typeof key === 'string' && SENSITIVE_FIELDS.has(key.toLowerCase())
+          ? key  // Keep original sensitive string key
+          : deepSanitize(key, visited)  // Sanitize non-string or non-sensitive keys
+        
+        // Only redact value if key is a sensitive string
+        const sanitizedValueRedacted = typeof key === 'string' && SENSITIVE_FIELDS.has(key.toLowerCase())
+          ? '[REDACTED]'  // Redact value for sensitive string keys
+          : deepSanitize(value, visited)  // Normal sanitization for other values
+        
+        sanitizedMap.set(sanitizedKeyPreserved, sanitizedValueRedacted)
       }
-    } else {
-      // Recursively sanitize nested objects
-      sanitized[key] = deepSanitize(value, visited)
+      return sanitizedMap
     }
-  }
 
-  return sanitized
+    // Handle Set objects
+    if (obj instanceof Set) {
+      const sanitizedSet = new Set()
+      for (const value of obj.values()) {
+        sanitizedSet.add(deepSanitize(value, visited))
+      }
+      return sanitizedSet
+    }
+
+    // Handle Error objects
+    if (obj instanceof Error) {
+      return {
+        name: obj.name,
+        message: obj.message,
+        stack: obj.stack
+      }
+    }
+
+    // Handle Arrays
+    if (Array.isArray(obj)) {
+      return obj.map(item => deepSanitize(item, visited))
+    }
+
+    // Handle plain objects and other object types
+    const sanitized: Record<string, any> = {}
+    
+    for (const [key, value] of Object.entries(obj)) {
+      // Check if the key is sensitive
+      if (SENSITIVE_FIELDS.has(key.toLowerCase())) {
+        sanitized[key] = '[REDACTED]'
+      } else if (key === 'userId' && typeof value === 'string' && value !== 'anonymous') {
+        // Special handling for userId truncation
+        if (value.length > 8) {
+          sanitized[key] = value.substring(0, 8) + '...'
+        } else {
+          sanitized[key] = value
+        }
+      } else {
+        // Recursively sanitize nested objects
+        sanitized[key] = deepSanitize(value, visited)
+      }
+    }
+
+    return sanitized
+  } finally {
+    // Remove from current recursion path to allow shared references
+    visited.delete(obj)
+  }
 }
 
 /**
