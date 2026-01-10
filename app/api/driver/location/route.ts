@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
+import { logger } from "@/lib/logger"
 
 export async function PUT(request: NextRequest) {
   try {
@@ -54,7 +55,7 @@ export async function PUT(request: NextRequest) {
         )
       }
 
-      console.log("[MSE] Location updated for shipment:", shipment.tracking_number)
+      logger.debug('Location updated for shipment', { trackingNumber: shipment.tracking_number })
     }
 
     // Update all active deliveries for this driver
@@ -76,7 +77,7 @@ export async function PUT(request: NextRequest) {
       message: "Location updated successfully",
     })
   } catch (error) {
-    console.error("[MSE] Location update error:", error)
+    logger.error('Location update error', error)
     return NextResponse.json({ error: "Failed to update location" }, { status: 500 })
   }
 }
@@ -118,7 +119,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error("[MSE] Get location error:", error)
+    logger.error('Get location error', error)
     return NextResponse.json({ error: "Failed to get location" }, { status: 500 })
   }
 }

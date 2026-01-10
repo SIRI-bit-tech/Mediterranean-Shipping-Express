@@ -181,7 +181,7 @@ export function ShipForm() {
 
       if (response.ok) {
         const data = await response.json()
-        console.log('Shipment created:', data)
+        // Shipment created successfully
         setCreatedShipment(data.shipment)
         setStep(4)
       } else {

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
+import { logger } from "@/lib/logger"
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ trackingNumber: string }> }) {
   try {
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       )
     }
 
-    console.log("[MSE] Tracking checkpoint created for:", trackingNumber, "Status:", status)
+    logger.debug('Tracking checkpoint created', { trackingNumber, status })
 
     return NextResponse.json({
       success: true,
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       message: "Tracking checkpoint created successfully",
     })
   } catch (error) {
-    console.error("[MSE] Checkpoint creation error:", error)
+    logger.error('Checkpoint creation error', error)
     return NextResponse.json({ error: "Failed to create checkpoint" }, { status: 500 })
   }
 }
@@ -126,7 +127,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       },
     })
   } catch (error) {
-    console.error("[MSE] Get checkpoints error:", error)
+    logger.error('Get checkpoints error', error)
     return NextResponse.json({ error: "Failed to retrieve checkpoints" }, { status: 500 })
   }
 }

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { handleAPIError, ValidationError, NotFoundError } from "@/lib/api-errors"
 import { query } from "@/lib/db"
 import { graphHopperService } from "@/lib/graphhopper-service"
+import { logger } from "@/lib/logger"
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ trackingNumber: string }> }) {
   try {
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       try {
         // Provide Swiss fallback for missing location data
         if (!city || !country) {
-          console.warn(`Missing required location data: city=${city}, country=${country} - using Swiss fallback`)
+          logger.warn('Missing required location data - using Swiss fallback', { city, country })
           // Use Zurich, Switzerland as fallback
           return { lat: 47.3769, lng: 8.5417 }
         }
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         
         // Ensure we have a meaningful address string
         if (addressString.trim().length < 3) {
-          console.warn(`Address string too short: "${addressString}"`)
+          logger.warn('Address string too short', { addressString })
           return { lat: 0, lng: 0 }
         }
 
@@ -100,7 +101,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         
         return countryDefaults[country] || { lat: 47.3769, lng: 8.5417 } // Default to Zurich, Switzerland
       } catch (error) {
-        console.error(`Geocoding error for ${city}, ${country}:`, error)
+        logger.error('Geocoding error', error, { city, country })
         return { lat: 0, lng: 0 }
       }
     }
@@ -143,7 +144,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         }
       }
     } catch (error) {
-      console.error('Route calculation error:', error)
+      logger.error('Route calculation error', error)
     }
 
     // Format response
@@ -199,7 +200,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error('Tracking error:', error)
+    logger.error('Tracking error', error)
     const { statusCode, response } = handleAPIError(error)
     return NextResponse.json(response, { status: statusCode })
   }

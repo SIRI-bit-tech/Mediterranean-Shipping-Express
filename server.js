@@ -8,6 +8,26 @@ require('dotenv').config()
 const { verifyToken } = require('./lib/jwt')
 const { query } = require('./lib/db')
 
+// Simple server-side logger for production safety
+const logger = {
+  info: (message, context = {}) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[INFO] ${message}`, context)
+    }
+  },
+  warn: (message, context = {}) => {
+    console.warn(`[WARN] ${message}`, context)
+  },
+  error: (message, error = null, context = {}) => {
+    console.error(`[ERROR] ${message}`, { error: error?.message || error, ...context })
+  },
+  debug: (message, context = {}) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[DEBUG] ${message}`, context)
+    }
+  }
+}
+
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = 'localhost'
 const port = 3000
@@ -27,7 +47,7 @@ app.prepare().then(() => {
       if (dev) {
         return ['http://localhost:3000', 'http://127.0.0.1:3000']
       } else {
-        console.warn('WARNING: ALLOWED_ORIGINS not set in production. Socket.IO connections will be rejected.')
+        logger.warn('ALLOWED_ORIGINS not set in production. Socket.IO connections will be rejected.')
         return []
       }
     }
@@ -52,22 +72,21 @@ app.prepare().then(() => {
   const validateOrigin = (origin, callback) => {
     const allowedOrigins = getAllowedOrigins()
     
-    console.log(`Socket.IO CORS check - Origin: ${origin}, Allowed: [${allowedOrigins.join(', ')}], Dev mode: ${dev}`)
+    logger.debug('Socket.IO CORS check', { origin, allowedOrigins, dev })
     
     // Allow requests with no origin (mobile apps, server-to-server)
     if (!origin) {
-      console.log('Socket.IO: Allowing request with no origin')
+      logger.debug('Socket.IO: Allowing request with no origin')
       return callback(null, true)
     }
     
     // Check if origin is in allowed list
     if (allowedOrigins.includes(origin)) {
-      console.log(`Socket.IO: Allowing origin ${origin}`)
+      logger.debug('Socket.IO: Allowing origin', { origin })
       return callback(null, true)
     }
     
-    console.warn(`Socket.IO connection rejected from unauthorized origin: ${origin}`)
-    console.warn(`Allowed origins: [${allowedOrigins.join(', ')}]`)
+    logger.warn('Socket.IO connection rejected from unauthorized origin', { origin, allowedOrigins })
     return callback(new Error('Origin not allowed by CORS policy'), false)
   }
   
@@ -95,7 +114,7 @@ app.prepare().then(() => {
           email: 'anonymous@tracking.com',
           role: 'ANONYMOUS'
         }
-        console.log(`Socket connected (anonymous): ${socket.id}`)
+        logger.debug('Socket connected (anonymous)', { socketId: socket.id })
         return next()
       }
 
@@ -110,7 +129,7 @@ app.prepare().then(() => {
             email: 'anonymous@tracking.com',
             role: 'ANONYMOUS'
           }
-          console.log(`Socket connected (anonymous - invalid token): ${socket.id}`)
+          logger.debug('Socket connected (anonymous - invalid token)', { socketId: socket.id })
           return next()
         }
 
@@ -128,7 +147,7 @@ app.prepare().then(() => {
             email: 'anonymous@tracking.com',
             role: 'ANONYMOUS'
           }
-          console.log(`Socket connected (anonymous - user not found): ${socket.id}`)
+          logger.debug('Socket connected (anonymous - user not found)', { socketId: socket.id })
           return next()
         }
 
@@ -143,7 +162,7 @@ app.prepare().then(() => {
             email: 'anonymous@tracking.com',
             role: 'ANONYMOUS'
           }
-          console.log(`Socket connected (anonymous - role mismatch): ${socket.id}`)
+          logger.debug('Socket connected (anonymous - role mismatch)', { socketId: socket.id })
           return next()
         }
 
@@ -155,11 +174,15 @@ app.prepare().then(() => {
           role: user.role
         }
 
-        console.log(`Socket authenticated: ${user.name} (${user.role}) - ${socket.id}`)
+        logger.debug('Socket authenticated', { 
+          userId: user.id.substring(0, 8) + '...', 
+          role: user.role, 
+          socketId: socket.id 
+        })
         next()
       } catch (error) {
         // Token verification failed - fallback to anonymous
-        console.log(`Socket authentication failed, using anonymous: ${error.message}`)
+        logger.debug('Socket authentication failed, using anonymous', { error: error.message })
         socket.user = {
           id: 'anonymous',
           name: 'Anonymous User',
@@ -169,7 +192,7 @@ app.prepare().then(() => {
         next()
       }
     } catch (error) {
-      console.error('Socket authentication error:', error)
+      logger.error('Socket authentication error', error)
       // Even on error, allow anonymous access
       socket.user = {
         id: 'anonymous',
@@ -237,13 +260,17 @@ app.prepare().then(() => {
       
       return false
     } catch (error) {
-      console.error('Error checking shipment access:', error)
+      logger.error('Error checking shipment access', error)
       return false
     }
   }
 
   io.on('connection', (socket) => {
-    console.log(`Client connected: ${socket.user.name} (${socket.user.role}) - ${socket.id}`)
+    logger.debug('Client connected', { 
+      userId: socket.user.id === 'anonymous' ? 'anonymous' : socket.user.id.substring(0, 8) + '...', 
+      role: socket.user.role, 
+      socketId: socket.id 
+    })
 
     // Handle joining shipment rooms with authorization
     socket.on('join-shipment', async (shipmentId) => {
@@ -258,15 +285,22 @@ app.prepare().then(() => {
         
         if (!hasAccess) {
           socket.emit('error', { message: 'Access denied to shipment' })
-          console.warn(`Access denied: ${socket.user.name} tried to join shipment ${shipmentId}`)
+          logger.warn('Access denied to shipment', { 
+            userId: socket.user.id === 'anonymous' ? 'anonymous' : socket.user.id.substring(0, 8) + '...', 
+            shipmentId 
+          })
           return
         }
 
         socket.join(`shipment-${shipmentId}`)
-        console.log(`${socket.user.name} (${socket.user.role}) joined shipment room: ${shipmentId}`)
+        logger.debug('User joined shipment room', { 
+          userId: socket.user.id === 'anonymous' ? 'anonymous' : socket.user.id.substring(0, 8) + '...', 
+          role: socket.user.role, 
+          shipmentId 
+        })
         socket.emit('joined-shipment', { shipmentId })
       } catch (error) {
-        console.error('Error joining shipment room:', error)
+        logger.error('Error joining shipment room', error)
         socket.emit('error', { message: 'Failed to join shipment room' })
       }
     })
@@ -274,7 +308,10 @@ app.prepare().then(() => {
     // Handle leaving shipment rooms
     socket.on('leave-shipment', (shipmentId) => {
       socket.leave(`shipment-${shipmentId}`)
-      console.log(`${socket.user.name} left shipment room: ${shipmentId}`)
+      logger.debug('User left shipment room', { 
+        userId: socket.user.id === 'anonymous' ? 'anonymous' : socket.user.id.substring(0, 8) + '...', 
+        shipmentId 
+      })
     })
 
     // Handle driver location updates with role and ownership validation
@@ -296,7 +333,10 @@ app.prepare().then(() => {
         
         if (!hasAccess) {
           socket.emit('error', { message: 'Driver not assigned to this shipment' })
-          console.warn(`Unauthorized location update: ${socket.user.name} for shipment ${location.shipmentId}`)
+          logger.warn('Unauthorized location update', { 
+            userId: socket.user.id.substring(0, 8) + '...', 
+            shipmentId: location.shipmentId 
+          })
           return
         }
 
@@ -308,10 +348,13 @@ app.prepare().then(() => {
           timestamp: new Date().toISOString()
         }
 
-        console.log(`Driver location update from ${socket.user.name}:`, locationUpdate)
+        logger.debug('Driver location update', { 
+          driverId: socket.user.id.substring(0, 8) + '...', 
+          shipmentId: location.shipmentId 
+        })
         socket.to(`shipment-${location.shipmentId}`).emit(`driver-location-${location.shipmentId}`, locationUpdate)
       } catch (error) {
-        console.error('Error handling driver location update:', error)
+        logger.error('Error handling driver location update', error)
         socket.emit('error', { message: 'Failed to update location' })
       }
     })
@@ -335,7 +378,10 @@ app.prepare().then(() => {
         
         if (!hasAccess) {
           socket.emit('error', { message: 'Access denied to shipment' })
-          console.warn(`Unauthorized status update: ${socket.user.name} for shipment ${update.shipmentId}`)
+          logger.warn('Unauthorized status update', { 
+            userId: socket.user.id.substring(0, 8) + '...', 
+            shipmentId: update.shipmentId 
+          })
           return
         }
 
@@ -348,10 +394,14 @@ app.prepare().then(() => {
           timestamp: new Date().toISOString()
         }
 
-        console.log(`Shipment status update from ${socket.user.name}:`, statusUpdate)
+        logger.debug('Shipment status update', { 
+          userId: socket.user.id.substring(0, 8) + '...', 
+          shipmentId: update.shipmentId, 
+          status: update.status 
+        })
         socket.to(`shipment-${update.shipmentId}`).emit(`shipment-update-${update.shipmentId}`, statusUpdate)
       } catch (error) {
-        console.error('Error handling shipment status update:', error)
+        logger.error('Error handling shipment status update', error)
         socket.emit('error', { message: 'Failed to update shipment status' })
       }
     })
@@ -378,7 +428,11 @@ app.prepare().then(() => {
           timestamp: new Date().toISOString()
         }
 
-        console.log(`Admin update from ${socket.user.name}:`, adminUpdate)
+        logger.debug('Admin update', { 
+          adminId: socket.user.id.substring(0, 8) + '...', 
+          shipmentId: update.shipmentId, 
+          type: update.type 
+        })
         
         // Send to specific shipment room
         socket.to(`shipment-${update.shipmentId}`).emit(`admin-update-${update.shipmentId}`, adminUpdate)
@@ -386,7 +440,7 @@ app.prepare().then(() => {
         // Only broadcast to admin activity feed for admins
         io.to('admin-room').emit('admin-activity-broadcast', adminUpdate)
       } catch (error) {
-        console.error('Error handling admin update:', error)
+        logger.error('Error handling admin update', error)
         socket.emit('error', { message: 'Failed to process admin update' })
       }
     })
@@ -413,12 +467,16 @@ app.prepare().then(() => {
           timestamp: new Date().toISOString()
         }
 
-        console.log(`Driver assignment from ${socket.user.name}:`, driverAssignment)
+        logger.debug('Driver assignment', { 
+          adminId: socket.user.id.substring(0, 8) + '...', 
+          shipmentId: assignment.shipmentId, 
+          driverId: assignment.driverId 
+        })
         
         // Emit to driver assignment listeners (admins only)
         io.to('admin-room').emit('driver-assignment', driverAssignment)
       } catch (error) {
-        console.error('Error handling driver assignment:', error)
+        logger.error('Error handling driver assignment', error)
         socket.emit('error', { message: 'Failed to assign driver' })
       }
     })
@@ -426,23 +484,29 @@ app.prepare().then(() => {
     // Auto-join admin room for admin users (not anonymous)
     if (socket.user.role === 'ADMIN' && socket.user.id !== 'anonymous') {
       socket.join('admin-room')
-      console.log(`Admin ${socket.user.name} joined admin room`)
+      logger.debug('Admin joined admin room', { 
+        adminId: socket.user.id.substring(0, 8) + '...' 
+      })
     }
 
     socket.on('disconnect', () => {
-      console.log(`Client disconnected: ${socket.user.name} (${socket.user.role}) - ${socket.id}`)
+      logger.debug('Client disconnected', { 
+        userId: socket.user.id === 'anonymous' ? 'anonymous' : socket.user.id.substring(0, 8) + '...', 
+        role: socket.user.role, 
+        socketId: socket.id 
+      })
     })
   })
 
   httpServer
     .once('error', (err) => {
-      console.error('Server error:', err)
+      logger.error('Server error', err)
       process.exit(1)
     })
     .listen(port, () => {
-      console.log(`> Ready on http://${hostname}:${port}`)
-      console.log('> Socket.IO server is running')
-      console.log(`> Development mode: ${dev}`)
-      console.log(`> Socket.IO CORS origins: ${getAllowedOrigins().join(', ')}`)
+      logger.info(`Server ready on http://${hostname}:${port}`)
+      logger.info('Socket.IO server is running')
+      logger.info(`Development mode: ${dev}`)
+      logger.debug('Socket.IO CORS origins', { origins: getAllowedOrigins() })
     })
 })

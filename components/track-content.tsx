@@ -637,7 +637,7 @@ export function TrackContent() {
           trackingNumber={shipment.trackingNumber}
           currentStatus={shipment.status}
           onRequestSubmitted={(request) => {
-            console.log('Package request submitted:', request)
+            // Package request submitted successfully
             // Optionally refresh the page or update state
           }}
         />

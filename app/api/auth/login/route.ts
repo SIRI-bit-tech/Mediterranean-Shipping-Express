@@ -3,6 +3,7 @@ import { handleAPIError, ValidationError, UnauthorizedError } from "@/lib/api-er
 import { query } from "@/lib/db"
 import { signToken } from "@/lib/jwt"
 import bcrypt from "bcryptjs"
+import { logger } from "@/lib/logger"
 
 export async function POST(request: NextRequest) {
   try {
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch (error) {
-    console.error('Login error:', error)
+    logger.error('Login error', error)
     const { statusCode, response } = handleAPIError(error)
     return NextResponse.json(response, { status: statusCode })
   }

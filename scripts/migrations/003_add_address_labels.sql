@@ -18,10 +18,11 @@ UPDATE addresses SET label = 'home' WHERE label IS NULL;
 ALTER TABLE addresses 
 ALTER COLUMN label SET NOT NULL;
 
--- Add check constraint for label values (idempotent)
-DO $$
+-- Add/update check constraint for label values (idempotent with updates)
+DO $$$
 BEGIN
-  IF NOT EXISTS (
+  -- Drop existing constraint if it exists to allow updates
+  IF EXISTS (
     SELECT 1 FROM pg_constraint c
     JOIN pg_class t ON c.conrelid = t.oid
     JOIN pg_namespace n ON t.relnamespace = n.oid
@@ -29,14 +30,17 @@ BEGIN
       AND t.relname = 'addresses'
       AND n.nspname = 'public'
   ) THEN
-    ALTER TABLE addresses 
-    ADD CONSTRAINT addresses_label_check 
-    CHECK (label IN ('home', 'work', 'billing', 'shipping', 'other'));
+    ALTER TABLE addresses DROP CONSTRAINT addresses_label_check;
   END IF;
+  
+  -- Add constraint with current label set
+  ALTER TABLE addresses 
+  ADD CONSTRAINT addresses_label_check 
+  CHECK (label IN ('home', 'work', 'billing', 'shipping', 'other'));
 END $$;
 
 -- Update existing NULL values to empty strings for consistent uniqueness (idempotent)
-DO $
+DO $$
 BEGIN
   -- Only update state column if it exists
   IF EXISTS (
@@ -57,7 +61,7 @@ BEGIN
   ) THEN
     UPDATE addresses SET postal_code = '' WHERE postal_code IS NULL;
   END IF;
-END $;
+END $$;
 
 -- Drop the old unique constraint
 ALTER TABLE addresses 
@@ -67,7 +71,7 @@ DROP CONSTRAINT IF EXISTS addresses_user_composite_unique;
 DROP INDEX IF EXISTS idx_addresses_composite_unique;
 
 -- Add new unique constraint with label (idempotent)
-DO $
+DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint c
@@ -81,8 +85,4 @@ BEGIN
     ADD CONSTRAINT addresses_user_composite_unique 
     UNIQUE (user_id, street, city, state, country, postal_code, label);
   END IF;
-END $;
-
--- Create new index matching the constraint (idempotent)
-CREATE INDEX IF NOT EXISTS idx_addresses_composite_unique 
-ON addresses (user_id, street, city, state, country, postal_code, label);
+END $$;

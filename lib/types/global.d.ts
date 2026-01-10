@@ -155,4 +155,19 @@ declare global {
   }
 }
 
-export {}
+// Export types for explicit imports
+export type {
+  UserRole,
+  ShipmentStatus,
+  TransportMode,
+  User,
+  Address,
+  Shipment,
+  TrackingCheckpoint,
+  DeliveryProof,
+  Notification,
+  ApiResponse,
+  PaginatedResponse,
+  TrackingUpdate,
+  DriverLocation
+}

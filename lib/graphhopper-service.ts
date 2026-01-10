@@ -5,6 +5,7 @@
  */
 
 import { fallbackMapService } from './fallback-map-service'
+import { logger } from './logger'
 
 const GRAPHHOPPER_BASE_URL = process.env.GRAPHHOPPER_BASE_URL || process.env.NEXT_PUBLIC_GRAPHHOPPER_BASE_URL || 'https://graphhopper.com/api/1'
 const GRAPHHOPPER_API_KEY = process.env.GRAPHHOPPER_API_KEY
@@ -56,7 +57,7 @@ class GraphHopperService {
 
     // Use fallback service if no API key is provided
     if (!GRAPHHOPPER_API_KEY || GRAPHHOPPER_API_KEY === 'your-graphhopper-api-key-here') {
-      console.warn('GraphHopper API key not configured, using fallback service')
+      logger.warn('GraphHopper API key not configured, using fallback service')
       this.apiKey = ''
       this.baseUrl = GRAPHHOPPER_BASE_URL
       return
@@ -94,7 +95,7 @@ class GraphHopperService {
 
       // Validate query is not empty and has meaningful content
       if (!query || query.length < 3) {
-        console.error('GraphHopper Geocoding: Query too short or empty:', query)
+        logger.error('GraphHopper Geocoding: Query too short or empty', undefined, { query })
         return null
       }
 
@@ -124,8 +125,11 @@ class GraphHopperService {
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error(`GraphHopper Geocoding failed: ${response.status} ${response.statusText}`)
-        console.error('Error details:', errorText)
+        logger.error('GraphHopper Geocoding failed', undefined, { 
+          status: response.status, 
+          statusText: response.statusText,
+          errorText 
+        })
         
         // Use fallback on error
         const fallbackResult = fallbackMapService.geocodeAddress(query)
@@ -165,7 +169,7 @@ class GraphHopperService {
 
       return null
     } catch (error) {
-      console.error('GraphHopper Geocoding error:', error)
+      logger.error('GraphHopper Geocoding error', error)
       
       // Try fallback on error
       const query = typeof address === 'string' ? address : this.formatAddressString(address)
@@ -195,7 +199,7 @@ class GraphHopperService {
       if (!start || !end || 
           typeof start.latitude !== 'number' || typeof start.longitude !== 'number' ||
           typeof end.latitude !== 'number' || typeof end.longitude !== 'number') {
-        console.error('GraphHopper Routing: Invalid coordinates provided')
+        logger.error('GraphHopper Routing: Invalid coordinates provided')
         return fallbackMapService.createStraightLineRoute(
           start || { latitude: 0, longitude: 0 },
           end || { latitude: 0, longitude: 0 }
@@ -220,8 +224,11 @@ class GraphHopperService {
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error(`GraphHopper Routing failed: ${response.status} ${response.statusText}`)
-        console.error('Error details:', errorText)
+        logger.error('GraphHopper Routing failed', undefined, {
+          status: response.status,
+          statusText: response.statusText,
+          errorText
+        })
         
         // Use fallback on error
         return fallbackMapService.createStraightLineRoute(start, end)
@@ -264,7 +271,7 @@ class GraphHopperService {
       // Use fallback if no paths
       return fallbackMapService.createStraightLineRoute(start, end)
     } catch (error) {
-      console.error('GraphHopper Routing error:', error)
+      logger.error('GraphHopper Routing error', error)
       
       // Use fallback on error
       return fallbackMapService.createStraightLineRoute(
@@ -302,8 +309,11 @@ class GraphHopperService {
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error(`GraphHopper Distance Matrix failed: ${response.status} ${response.statusText}`)
-        console.error('Error details:', errorText)
+        logger.error('GraphHopper Distance Matrix failed', undefined, {
+          status: response.status,
+          statusText: response.statusText,
+          errorText
+        })
         
         // Use fallback on error
         return this.calculateFallbackMatrix(locations)
@@ -321,7 +331,7 @@ class GraphHopperService {
       // Use fallback if no data
       return this.calculateFallbackMatrix(locations)
     } catch (error) {
-      console.error('GraphHopper Distance Matrix error:', error)
+      logger.error('GraphHopper Distance Matrix error', error)
       
       // Use fallback on error
       return this.calculateFallbackMatrix(locations)
@@ -351,7 +361,7 @@ class GraphHopperService {
         eta
       }
     } catch (error) {
-      console.error('GraphHopper ETA calculation error:', error)
+      logger.error('GraphHopper ETA calculation error', error)
       return null
     }
   }
@@ -379,8 +389,11 @@ class GraphHopperService {
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error(`GraphHopper Reverse Geocoding failed: ${response.status} ${response.statusText}`)
-        console.error('Error details:', errorText)
+        logger.error('GraphHopper Reverse Geocoding failed', undefined, {
+          status: response.status,
+          statusText: response.statusText,
+          errorText
+        })
         return `${coordinates.latitude.toFixed(4)}, ${coordinates.longitude.toFixed(4)}`
       }
 
@@ -392,7 +405,7 @@ class GraphHopperService {
 
       return `${coordinates.latitude.toFixed(4)}, ${coordinates.longitude.toFixed(4)}`
     } catch (error) {
-      console.error('GraphHopper Reverse Geocoding error:', error)
+      logger.error('GraphHopper Reverse Geocoding error', error)
       return `${coordinates.latitude.toFixed(4)}, ${coordinates.longitude.toFixed(4)}`
     }
   }
@@ -453,7 +466,7 @@ class GraphHopperService {
       const result = await this.geocodeAddress('London')
       return result !== null
     } catch (error) {
-      console.error('GraphHopper Health Check failed:', error)
+      logger.error('GraphHopper Health Check failed', error)
       return false
     }
   }

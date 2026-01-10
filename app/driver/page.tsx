@@ -9,15 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DriverStats } from "@/components/driver-stats"
 import { DeliveryListItem } from "@/components/delivery-list-item"
 import { MapPin, AlertCircle, Navigation, LogOut, CheckCircle2, Loader2 } from "lucide-react"
-
-interface Shipment {
-  id: string
-  trackingNumber: string
-  status: string
-  currentLatitude?: number
-  currentLongitude?: number
-  actualDeliveryDate?: string
-}
+import type { Shipment } from "@/lib/types/global"
 
 export default function DriverDashboard() {
   const [deliveries, setDeliveries] = useState<Shipment[]>([])

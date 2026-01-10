@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
 import { requireAdminAuth } from "@/lib/auth"
 import { transformShipmentRows, ShipmentRow } from "@/lib/shipment-utils"
+import { logger } from "@/lib/logger"
 
 export async function GET(request: NextRequest) {
   try {
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('Error fetching shipments:', error)
+    logger.error('Error fetching shipments', error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

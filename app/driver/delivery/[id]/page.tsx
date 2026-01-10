@@ -55,19 +55,30 @@ interface DeliveryDetailPageProps {
   params: Promise<{ id: string }>
 }
 
-export default async function DeliveryDetailPage({ params }: DeliveryDetailPageProps) {
-  const { id } = await params
+export default function DeliveryDetailPage({ params }: DeliveryDetailPageProps) {
+  const [id, setId] = useState<string | null>(null)
   const [notes, setNotes] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [delivery, setDelivery] = useState<DeliveryData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Resolve params Promise
   useEffect(() => {
-    fetchDeliveryDetails()
-  }, [params.id])
+    params.then(resolvedParams => {
+      setId(resolvedParams.id)
+    })
+  }, [params])
+
+  useEffect(() => {
+    if (id) {
+      fetchDeliveryDetails()
+    }
+  }, [id])
 
   const fetchDeliveryDetails = async () => {
+    if (!id) return
+    
     try {
       const token = localStorage.getItem('token')
       if (!token) {
@@ -75,7 +86,7 @@ export default async function DeliveryDetailPage({ params }: DeliveryDetailPageP
         return
       }
 
-      const response = await fetch(`/api/driver/deliveries/${params.id}`, {
+      const response = await fetch(`/api/driver/deliveries/${id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

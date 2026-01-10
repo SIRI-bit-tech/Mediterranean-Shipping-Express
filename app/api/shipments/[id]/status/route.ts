@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
 import { requireAuth, AuthUser } from "@/lib/auth"
+import { logger } from "@/lib/logger"
 
 // Define allowed shipment status values
 const ALLOWED_STATUSES = [
@@ -148,11 +149,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
-    console.log("[MSE] Tracking checkpoint created for:", updatedShipment.tracking_number, "Status:", status)
+    logger.debug('Tracking checkpoint created', { 
+      trackingNumber: updatedShipment.tracking_number, 
+      status 
+    })
 
     // TODO: Emit socket.io event for real-time updates
     // This would require socket.io server integration
-    console.log("[MSE] Real-time update event should be emitted for tracking number:", updatedShipment.tracking_number)
+    logger.debug('Real-time update event should be emitted', { 
+      trackingNumber: updatedShipment.tracking_number 
+    })
 
     return NextResponse.json({
       success: true,
@@ -166,7 +172,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       message: "Shipment status updated successfully",
     })
   } catch (error) {
-    console.error("[MSE] Status update error:", error)
+    logger.error('Status update error', error)
     return NextResponse.json({ error: "Failed to update status" }, { status: 500 })
   }
 }
@@ -214,7 +220,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       ]
     )
 
-    console.log("[MSE] Real-time update event emitted for tracking number:", updatedShipment.tracking_number)
+    logger.debug('Real-time update event emitted', { 
+      trackingNumber: updatedShipment.tracking_number 
+    })
 
     return NextResponse.json({
       success: true,
@@ -228,7 +236,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       message: "Shipment status updated",
     })
   } catch (error) {
-    console.error("[MSE] Status update error:", error)
+    logger.error('Status update error (PATCH)', error)
     return NextResponse.json({ success: false, message: "Failed to update status" }, { status: 500 })
   }
 }
