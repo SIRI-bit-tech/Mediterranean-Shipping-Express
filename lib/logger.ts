@@ -3,14 +3,7 @@
  * Only logs appropriate information based on environment
  */
 
-type LogLevel = 'info' | 'warn' | 'error' | 'debug'
-
-interface LogContext {
-  userId?: string
-  sessionId?: string
-  action?: string
-  [key: string]: any
-}
+import { sanitizeContext, type LogContext } from './logger-utils'
 
 class Logger {
   private isDevelopment = process.env.NODE_ENV === 'development'
@@ -21,7 +14,7 @@ class Logger {
    */
   info(message: string, context?: LogContext) {
     if (this.isDevelopment && this.isServer) {
-      console.log(`[INFO] ${message}`, context ? this.sanitizeContext(context) : '')
+      console.log(`[INFO] ${message}`, context ? sanitizeContext(context) : '')
     }
   }
 
@@ -30,7 +23,7 @@ class Logger {
    */
   warn(message: string, context?: LogContext) {
     if (this.isServer) {
-      console.warn(`[WARN] ${message}`, context ? this.sanitizeContext(context) : '')
+      console.warn(`[WARN] ${message}`, context ? sanitizeContext(context) : '')
     }
   }
 
@@ -41,7 +34,7 @@ class Logger {
     if (this.isServer) {
       console.error(`[ERROR] ${message}`, {
         error: error instanceof Error ? error.message : String(error),
-        context: context ? this.sanitizeContext(context) : undefined
+        context: context ? sanitizeContext(context) : undefined
       })
     }
   }
@@ -51,31 +44,8 @@ class Logger {
    */
   debug(message: string, context?: LogContext) {
     if (this.isDevelopment && this.isServer) {
-      console.log(`[DEBUG] ${message}`, context ? this.sanitizeContext(context) : '')
+      console.log(`[DEBUG] ${message}`, context ? sanitizeContext(context) : '')
     }
-  }
-
-  /**
-   * Sanitize context to remove sensitive information
-   */
-  private sanitizeContext(context: LogContext): LogContext {
-    const sanitized = { ...context }
-    
-    // Remove sensitive fields
-    delete sanitized.password
-    delete sanitized.token
-    delete sanitized.secret
-    delete sanitized.apiKey
-    
-    // Truncate user IDs for privacy
-    if (sanitized.userId && sanitized.userId !== 'anonymous') {
-      if (sanitized.userId.length > 8) {
-        sanitized.userId = sanitized.userId.substring(0, 8) + '...'
-      }
-      // If length <= 8, leave sanitized.userId unchanged
-    }
-    
-    return sanitized
   }
 
   /**
